@@ -21,6 +21,6 @@ module Example (K : Kahn.S) = struct
 
 end
 
-module E = Example(Kahn_lwt.Lwt_th)
+module E = Example(Kahn_th.Th)
 
 let () = E.K.run E.main
