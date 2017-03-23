@@ -2,6 +2,7 @@
 open Kahn
 
 module Th: S = struct
+
   type 'a process = (unit -> 'a)
 
   type 'a channel = { q: 'a Queue.t ; m: Mutex.t; }
@@ -41,5 +42,6 @@ module Th: S = struct
     e' v ()
 
   let run e = e ()
+
 end
 
