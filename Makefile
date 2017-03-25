@@ -5,6 +5,8 @@ TARGET=native
 example:
 	$(OCAMLBUILD) int_generator.$(TARGET)
 
+sift:
+	$(OCAMLBUILD) SIFT.$(TARGET)
 
 clean:
 	$(OCAMLBUILD) -clean
