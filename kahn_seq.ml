@@ -1,4 +1,24 @@
 
+(* 
+
+  Il y a au moins deux implémentations possibles qui incarne la même idée.
+   
+  La première consiste à traduire directement le code Haskell de l'article
+  "A Poor Man's Concurrency Monad" en OCaml (il y a quand-même des petites 
+  nuances mais on garde à peu près la même structure). Dans ce cas il faut
+  définir les types ad-hoc récursifs pour representer l'action à effectuer
+  dans l'avenir. 
+
+  La deuxième possibilité est de donner un  processus le type 
+  ('a -> unit) -> unit comme indiqué dans l'énoncé, il faut alors avoir à côté
+  une structure globale et après chaque étape de l'exécution d'un processus
+  on stocke ce qui reste à faire dans cette structure.
+
+  Ici on choisit la première implémentation.
+
+*)
+
+
 open Kahn
 
 module Seq: S = struct
