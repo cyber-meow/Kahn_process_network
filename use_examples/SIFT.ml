@@ -1,9 +1,22 @@
 
 module SIFT (K : Kahn.S) = struct
 
-  include Int_generator.Example(K)
+  module K = K
+  module Lib = Kahn.Lib(K)
   open Lib
 
+  let integers n0 (qo : int K.out_port) : unit K.process =
+    let rec loop n =
+      K.put n qo >>= fun () -> loop (n + 1)
+    in
+    loop n0
+
+  let output (qi : int K.in_port) : unit K.process =
+    let rec loop () =
+      K.get qi >>= fun v -> Format.printf "%d@." v; loop ()
+    in
+    loop ()
+  
   let filter prime qi qo =
     let rec loop () =
       K.get qi >>= 
@@ -25,6 +38,6 @@ module SIFT (K : Kahn.S) = struct
 
 end
 
-module SI = SIFT(Kahn_proc.Proc)
+module SI = SIFT(Kahn_network.Net)
 
 let () = SI.K.run SI.main

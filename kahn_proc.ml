@@ -6,9 +6,9 @@ module Proc: S = struct
 
     type 'a process = (unit -> 'a)
 
-    type 'a channel = { i: in_channel; o: out_channel; m: Mutex.t}
-    type 'a in_port = 'a channel
-    type 'a out_port = 'a channel
+    type channel = { i: in_channel; o: out_channel; m: Mutex.t }
+    type 'a in_port = channel
+    type 'a out_port = channel
 
     let new_channel () = 
       let r, w = Unix.pipe () in

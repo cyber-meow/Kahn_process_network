@@ -23,6 +23,6 @@ module Example (K : Kahn.S) = struct
 
 end
 
-module E = Example(Kahn_proc.Proc)
+module E = Example(Kahn_network.Net)
 
-(*let () = E.K.run E.main*)
+let () = E.K.run E.main

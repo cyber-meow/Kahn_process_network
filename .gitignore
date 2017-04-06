@@ -21,3 +21,5 @@ setup.log
 
 *.swp
 *.tgz
+*.config
+test/
