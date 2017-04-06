@@ -5,16 +5,16 @@ open Unix
 
 
 
-let mm = Mutex.create ()
+(*let mm = Mutex.create ()
 
 let debug str = 
   Mutex.lock mm;
   Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
-  Mutex.unlock mm
+  Mutex.unlock mm *)
 
 
 
-(* let debug str = () *)
+let debug str = ()
 
 module Prot = struct
 
@@ -118,7 +118,7 @@ module Net: S = struct
   let computer_queue = Queue.create ()
   let doco_mutex = Mutex.create ()
   let hostname = Unix.gethostname ()
-  let init_port = 1025
+  let init_port = 2000
   let curr_port = ref init_port
 
 
@@ -136,20 +136,20 @@ module Net: S = struct
     let waiting = create_waiting () in
     let in_ser, out_ser = Unix.pipe () in
     ignore ( 
-      Thread.create (fun () ->
+      Thread.create (fun () -> Unix.handle_unix_error (fun () ->
         debug "send thread";
         Mutex.lock waiting.m;
         let in_send_cl, _ = accept_adhoc SEND s waiting in
         Mutex.unlock waiting.m;
         commu_with_send
-          s in_send_cl (out_channel_of_descr out_ser) waiting) (),
-      Thread.create (fun () ->
+        s in_send_cl (out_channel_of_descr out_ser) waiting) ()) (),
+      Thread.create (fun () -> Unix.handle_unix_error (fun () ->
         debug "recv thread";
         Mutex.lock waiting.m;
         let in_recv_cl, out_recv_cl = accept_adhoc RECEIVE s waiting in
         Mutex.unlock waiting.m;
         commu_with_recv 
-          s in_recv_cl out_recv_cl (in_channel_of_descr in_ser) waiting) ());
+        s in_recv_cl out_recv_cl (in_channel_of_descr in_ser) waiting) ()) ());
     
     (* On fait attention au fait que ch1 et ch2 sont différents! *)
     let ch1 = { port_num = !curr_port ; host = hostname ; sock = None } in
@@ -274,7 +274,8 @@ module Net: S = struct
       | PutEnd -> exit 0  (* on termine le programme, pas que le thread *)
       | Msg (proc : unit process) -> 
           debug "get process";
-          ignore (Thread.create run_proc_thread (proc, out_ch));
+          ignore (Thread.create (fun () -> 
+            Unix.handle_unix_error run_proc_thread (proc, out_ch)) ());
           accept_proc ()
     in
     accept_proc ()
