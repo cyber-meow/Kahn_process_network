@@ -3,7 +3,7 @@ open Kahn
 open Unix
 
 
-(*
+
 
 let mm = Mutex.create ()
 
@@ -12,9 +12,9 @@ let debug str =
   Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
   Mutex.unlock mm
 
-*)
 
-let debug str = ()
+
+(* let debug str = () *)
 
 module Prot = struct
 
@@ -85,7 +85,6 @@ module Prot = struct
     match (Marshal.from_channel in_cl : get_msg) with
     | GetEnd ->
         shutdown (descr_of_in_channel in_cl) SHUTDOWN_ALL;
-        close_in in_cl;
         close_out out_cl;
         Mutex.lock waiting.m;
         let in_cl, out_cl = accept_adhoc RECEIVE s waiting in
@@ -130,6 +129,7 @@ module Net: S = struct
     incr curr_port;
     let addr = ADDR_INET (ip_addr, !curr_port) in
     let s = Unix.socket PF_INET SOCK_STREAM 0 in
+    Unix.setsockopt s SO_REUSEADDR true;
     Unix.bind s addr;
     Unix.listen s 20;
     
@@ -195,11 +195,11 @@ module Net: S = struct
   let close_port port = match port.sock with
     | None -> ()
     | Some ((in_ch, out_ch), sock_kind) ->
+        debug "try to close a port";
         begin match sock_kind with
           | SEND -> Marshal.to_channel out_ch PutEnd []
           | RECEIVE -> Marshal.to_channel out_ch GetEnd [] end;
-        flush out_ch; 
-        close_in in_ch; close_out out_ch; 
+        flush out_ch; close_out out_ch;
         port.sock <- None
   
   (* penser à utiliser mutex pour cette fonction *)
@@ -251,7 +251,10 @@ module Net: S = struct
   let run_proc_thread ((proc : unit process), out_ch) =
     debug "try to run a proc";
     let (), opened_ports = proc CSet.empty in
+    debug "this process end";
+    debug @@ (string_of_int @@ CSet.cardinal opened_ports) ^ " port(s)";
     CSet.iter close_port opened_ports;
+    debug "and close ports";
     output_string out_ch "END";
     flush out_ch; close_out out_ch;
     Thread.exit ()
@@ -260,6 +263,7 @@ module Net: S = struct
     let ip_addr = Unix.inet_addr_any in
     let addr = ADDR_INET (ip_addr, init_port) in
     let s = Unix.socket PF_INET SOCK_STREAM 0 in
+    Unix.setsockopt s SO_REUSEADDR true;
     Unix.bind s addr;
     Unix.listen s 20;
     let rec accept_proc () =
