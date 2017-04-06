@@ -15,6 +15,9 @@ put_get:
 sift:
 	$(OCAMLBUILD) $(DIR)SIFT.$(TARGET)
 
+sift_net:
+	$(OCAMLBUILD) $(DIR)SIFT_net.$(TARGET)
+
 clean:
 	$(OCAMLBUILD) -clean
 
