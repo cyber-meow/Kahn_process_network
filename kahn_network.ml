@@ -30,6 +30,14 @@ module Prot = struct
     { send_q = Queue.create () ; recv_q = Queue.create () ; 
       m = Mutex.create () }
 
+  let listen_port port_num =
+    let ip_addr = Unix.inet_addr_any in
+    let addr = ADDR_INET (ip_addr, port_num) in
+    let s = Unix.socket PF_INET SOCK_STREAM 0 in
+    Unix.setsockopt s SO_REUSEADDR true;
+    Unix.bind s addr;
+    Unix.listen s 20; s
+
   let accept_sock s =
     let s_cl, _ = Unix.accept s in
     in_channel_of_descr s_cl, out_channel_of_descr s_cl
@@ -40,7 +48,7 @@ module Prot = struct
       let host = Unix.gethostbyname hostname in
       let ip_addr = host.h_addr_list.(0) in
       let addr = ADDR_INET (ip_addr, port_num) in
-      connect s addr;
+      Unix.connect s addr;
       debug "connect to somebody";
       let in_ch = in_channel_of_descr s in
       let out_ch = out_channel_of_descr s in
@@ -118,38 +126,40 @@ module Net: S = struct
   let computer_queue = Queue.create ()
   let doco_mutex = Mutex.create ()
   let hostname = Unix.gethostname ()
-  let init_port = 2000
-  let curr_port = ref init_port
+  let init_port = ref 1024
+  let curr_port = ref !init_port
 
 
   let new_channel () = 
     debug "new_channel"; 
 
-    let ip_addr = Unix.inet_addr_any in
-    incr curr_port;
-    let addr = ADDR_INET (ip_addr, !curr_port) in
-    let s = Unix.socket PF_INET SOCK_STREAM 0 in
-    Unix.setsockopt s SO_REUSEADDR true;
-    Unix.bind s addr;
-    Unix.listen s 20;
+    let rec listen_incr () =
+      try 
+        incr curr_port;
+        listen_port !curr_port
+      with Unix_error(EADDRINUSE, _, _)
+         | Unix_error(EADDRNOTAVAIL, _, _) ->
+        listen_incr ()
+    in
+    let s = listen_incr () in
     
     let waiting = create_waiting () in
     let in_ser, out_ser = Unix.pipe () in
     ignore ( 
-      Thread.create (fun () -> Unix.handle_unix_error (fun () ->
+      Thread.create (Unix.handle_unix_error (fun () ->
         debug "send thread";
         Mutex.lock waiting.m;
         let in_send_cl, _ = accept_adhoc SEND s waiting in
         Mutex.unlock waiting.m;
         commu_with_send
-        s in_send_cl (out_channel_of_descr out_ser) waiting) ()) (),
-      Thread.create (fun () -> Unix.handle_unix_error (fun () ->
+        s in_send_cl (out_channel_of_descr out_ser) waiting)) (),
+      Thread.create (Unix.handle_unix_error (fun () ->
         debug "recv thread";
         Mutex.lock waiting.m;
         let in_recv_cl, out_recv_cl = accept_adhoc RECEIVE s waiting in
         Mutex.unlock waiting.m;
         commu_with_recv 
-        s in_recv_cl out_recv_cl (in_channel_of_descr in_ser) waiting) ()) ());
+        s in_recv_cl out_recv_cl (in_channel_of_descr in_ser) waiting)) ());
     
     (* On fait attention au fait que ch1 et ch2 sont différents! *)
     let ch1 = { port_num = !curr_port ; host = hostname ; sock = None } in
@@ -206,13 +216,13 @@ module Net: S = struct
   let send_processes = 
     List.fold_left 
       (fun in_lis proc -> 
-        let exec_comp = Queue.pop computer_queue in
+        let exec_comp, corr_port = Queue.pop computer_queue in
         debug @@ "before_connect " ^ exec_comp;
-        let in_ch, out_ch = easy_connect exec_comp init_port in
+        let in_ch, out_ch = easy_connect exec_comp corr_port in
         debug "after_connect";
         Marshal.to_channel out_ch (Msg proc) [Marshal.Closures];
         flush out_ch;
-        Queue.push exec_comp computer_queue; in_ch :: in_lis) []
+        Queue.push (exec_comp, corr_port) computer_queue; in_ch :: in_lis) []
 
   let doco l opened_ports =
     debug "doco";
@@ -239,15 +249,6 @@ module Net: S = struct
     f exec opened_ports'
 
 
-  let wait = ref false
-  let usage = "usage: <program> [option]"
-  let options = 
-    [ "-wait", Arg.Set wait, 
-      "must be used by all the computers except the principal one" ]
-  
-  let config_file = ref "network.config"
-
-
   let run_proc_thread ((proc : unit process), out_ch) =
     debug "try to run a proc";
     let (), opened_ports = proc CSet.empty in
@@ -260,12 +261,7 @@ module Net: S = struct
     Thread.exit ()
 
   let listen_thread () =
-    let ip_addr = Unix.inet_addr_any in
-    let addr = ADDR_INET (ip_addr, init_port) in
-    let s = Unix.socket PF_INET SOCK_STREAM 0 in
-    Unix.setsockopt s SO_REUSEADDR true;
-    Unix.bind s addr;
-    Unix.listen s 20;
+    let s = listen_port !init_port in
     let rec accept_proc () =
       debug "new accept";
       let in_ch, out_ch = accept_sock s in
@@ -280,33 +276,50 @@ module Net: S = struct
     in
     accept_proc ()
 
+  
+  let wait = ref false
+  let usage = "usage: <program> [option]"
+  let options = 
+    [ "-wait", Arg.Set wait, 
+      "must be used by all the peers except the principal one";
+      "-port", Arg.Set_int init_port,
+      "specify the main port that is used to communicate with other
+       computers (dafault: the port 1024), should be the same with the one 
+       given in the configuration file"]
+  
+  let config_file = ref "network.config"
 
-  let run e =
+
+  let run_aux e =
 
     Arg.parse options (fun str -> config_file := str) usage;
     let conf = open_in !config_file in
-    let rec add_computer in_ch =
+    let rec add_peer in_ch =
       try
-        let compu = input_line in_ch in
-        debug compu;
-        Queue.push compu computer_queue; add_computer in_ch
+        let peer = input_line in_ch in
+        debug peer;
+        let compu::port::_ = Str.split (Str.regexp "[ \t]+") peer in
+        Queue.push (compu, int_of_string port) computer_queue; 
+        add_peer in_ch
       with End_of_file -> ()
     in
-    add_computer conf;
+    add_peer conf;
 
     if !wait then handle_unix_error listen_thread () 
     
     else
-      ignore (Thread.create (fun () -> handle_unix_error listen_thread ()) ());
+      ignore (Thread.create (handle_unix_error listen_thread) ());
       debug "before exe";
       let res, opened_ports = e CSet.empty in
       CSet.iter close_port opened_ports;
       Queue.iter
-        (fun computer -> 
+        (fun (computer, port) -> 
           if computer <> hostname then
-          let _, out_ch = easy_connect computer init_port in
+          let _, out_ch = easy_connect computer port in
           Marshal.to_channel out_ch PutEnd [];
           flush out_ch; close_out out_ch) computer_queue;
       res
+
+  let run e = Unix.handle_unix_error run_aux e
 
 end
