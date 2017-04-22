@@ -31,6 +31,8 @@ module Prot = struct
     { send_q = Queue.create () ; recv_q = Queue.create () ; 
       m = Mutex.create () }
 
+  (* Exceptions that need to be handled: 
+     Unix_error (EADDRINUSE, _, _), Unix_error (EADDRNOTAVAIL, _, _) *)
   let listen_port port_num =
     debug @@ "listen at port " ^ (string_of_int port_num); 
     let ip_addr = Unix.inet_addr_any in
@@ -45,24 +47,18 @@ module Prot = struct
     in_channel_of_descr s_cl, out_channel_of_descr s_cl
 
   (* Exceptions that need to be handled: 
-     Not_found
-     Unix_error (ECONNREFUSED, _, _)
-     Unix_error (ETIMEOUT, _, _) *)
+     Not_found, 
+     Unix_error (ECONNREFUSED, _, _), Unix_error (ETIMEOUT, _, _), ... *)
   let easy_connect hostname port_num =
     let s = Unix.socket PF_INET SOCK_STREAM 0 in
-    try
-      let host = Unix.gethostbyname hostname in
-      let ip_addr = host.h_addr_list.(0) in
-      let addr = ADDR_INET (ip_addr, port_num) in
-      Unix.connect s addr;
-      debug "connect to somebody";
-      let in_ch = in_channel_of_descr s in
-      let out_ch = out_channel_of_descr s in
-      in_ch, out_ch
-    with Not_found ->
-        Format.printf 
-          "cannot connect to the port %d of computer %s@." port_num hostname; 
-        exit 1
+    let host = Unix.gethostbyname hostname in
+    let ip_addr = host.h_addr_list.(0) in
+    let addr = ADDR_INET (ip_addr, port_num) in
+    Unix.connect s addr;
+    debug "connect to somebody";
+    let in_ch = in_channel_of_descr s in
+    let out_ch = out_channel_of_descr s in
+    in_ch, out_ch
 
   let rec accept_adhoc_rec ad s waiting =
     let corres, oth = match ad with
@@ -73,10 +69,19 @@ module Prot = struct
     else
       let in_ch, out_ch = accept_sock s in
       debug "to see SEND or RECEIVE";
-      if (Marshal.from_channel in_ch : sock_kind) = ad then in_ch, out_ch
-      else begin
-        Queue.push (in_ch, out_ch) oth;
-        accept_adhoc_rec ad s waiting end
+      try
+        if (Marshal.from_channel in_ch : sock_kind) = ad then 
+          in_ch, out_ch
+        else begin
+          Queue.push (in_ch, out_ch) oth;
+          accept_adhoc_rec ad s waiting end
+      with
+        | End_of_file ->
+            print_error Channel_no_identification;
+            accept_adhoc_rec ad s waiting
+        | Failure f when f = "input_value: truncated object" ->
+            print_error Channel_no_identification;
+            accept_adhoc_rec ad s waiting
 
   let accept_adhoc ad s waiting =
     Mutex.lock waiting.m;
@@ -85,6 +90,7 @@ module Prot = struct
     in_ch, out_ch
 
   let new_client ad s in_cl waiting =
+    debug "new client";
     shutdown (descr_of_in_channel in_cl) SHUTDOWN_ALL;
     close_in in_cl;
     accept_adhoc ad s waiting
@@ -98,14 +104,18 @@ module Prot = struct
         | PutEnd -> fst @@ new_client ()
         | Msg obj ->
             (* Si le programme fonctionne correctement, cette ligne ne peut 
-               jamais être la source d'une erreur car in_ser est un pipe qui 
+               jamais être la source d'une erreur car out_ser est un pipe qui 
                est parfaitement controlé par le neoud lui-même *)
             Marshal.to_channel out_ser obj [Marshal.Closures];
             flush out_ser; in_cl
       with 
-        | End_of_file | Failure ("input_value: truncated object") ->
-            (* TODO: error message *)
-            Format.eprintf "Warning: tuncate send@."; fst @@ new_client ()
+        | End_of_file -> 
+            print_error Channel_in_invalid;
+            (* shutdown cannot be used in this case *)
+            fst @@ accept_adhoc SEND s waiting
+        | Failure f when f = "input_value: truncated object" ->
+            print_error Channel_in_invalid;
+            fst @@ accept_adhoc SEND s waiting
     in
     commu_with_send s in_cl out_ser waiting
 
@@ -117,20 +127,19 @@ module Prot = struct
         match (Marshal.from_channel in_cl : get_msg) with
         | GetEnd -> new_client ()
         | Get ->
-            (* Si le programme fonctionne correctement, cette ligne ne peut 
-               jamais être la source d'une erreur car in_ser est un pipe qui 
-               est parfaitement controlé par le neoud lui-même *)
+            (* c.f. avant, n'est pas censée être une source d'erreur *) 
             let obj = Marshal.from_channel in_ser in
             Marshal.to_channel out_cl obj [Marshal.Closures];
             flush out_cl; in_cl, out_cl
       with
-        | End_of_file | Failure ("input_value: truncated object") ->
-            (* TODO: error message *)
-            Format.eprintf "Warning: truncate@."; new_client ()
-        | Unix_error (ECONNRESET, _, _) ->
-            (* TODO: error message *)
-            Format.eprintf "Warning: recv connection reset"; 
-            (* shutdown cannot be used in this case *)
+        | End_of_file ->
+            print_error Channel_request_invalid;
+            accept_adhoc RECEIVE s waiting
+        | Failure f when f = "input_value: truncated object" ->
+            print_error Channel_request_invalid;
+            accept_adhoc RECEIVE s waiting
+        | Sys_error e when e = "Connection reset by peer" ->
+            print_error Channel_out_reset;
             accept_adhoc RECEIVE s waiting
     in
     commu_with_recv s in_cl out_cl in_ser waiting
@@ -155,7 +164,9 @@ module Net: S = struct
   type 'a out_port = channel
 
   let computer_queue = Queue.create ()
+  let add_self = ref false
   let doco_mutex = Mutex.create ()
+  
   let hostname = Unix.gethostname ()
   let init_port = ref 1024
   let curr_port = ref 0
@@ -168,9 +179,10 @@ module Net: S = struct
       try 
         incr curr_port;
         listen_port !curr_port
-      with Unix_error(EADDRINUSE, _, _)
-         | Unix_error(EADDRNOTAVAIL, _, _) ->
-        listen_incr ()
+      with 
+        | Unix_error(EACCES, _, _)
+        | Unix_error(EADDRINUSE, _, _)
+        | Unix_error(EADDRNOTAVAIL, _, _) -> listen_incr ()
     in
     let s = listen_incr () in
     
@@ -196,53 +208,98 @@ module Net: S = struct
 
 
   let put v c opened_ports = 
-    debug "put_something"; 
-    let out_ch = match c.sock with
-      | None -> 
-          debug "put_something_none"; 
-          let in_ch, out_ch = easy_connect c.host c.port_num in
-          c.sock <- Some ((in_ch, out_ch), SEND);
-          debug "put_befor_marshal"; 
-          Marshal.to_channel out_ch SEND [];
-          debug "put_after_marshal"; 
-          flush out_ch;
-          debug "put_something_succeed"; out_ch
-      | Some ((_, out_ch), k) -> assert (k = SEND); out_ch
-    in
-    Marshal.to_channel out_ch (Msg v) [Marshal.Closures];
-    flush out_ch;
+    debug "put_something";
+    begin 
+    try
+      let out_ch = match c.sock with
+        | None -> 
+            debug "put_something_none"; 
+            let in_ch, out_ch = easy_connect c.host c.port_num in
+            c.sock <- Some ((in_ch, out_ch), SEND);
+            debug "put_befor_marshal"; 
+            Marshal.to_channel out_ch SEND [];
+            debug "put_after_marshal"; 
+            flush out_ch;
+            debug "put_something_succeed"; out_ch
+        | Some ((_, out_ch), k) -> assert (k = SEND); out_ch
+      in
+      Marshal.to_channel out_ch (Msg v) [Marshal.Closures];
+      flush out_ch
+    with
+      | Unix_error (err, _, _) ->
+          print_error @@ Put_channel_no_connect
+            (c.host, c.port_num, Unix.error_message err);
+          Thread.exit ()
+      | Sys_error err_msg ->
+          print_error @@ Put_channel_no_connect (c.host, c.port_num, err_msg);
+          Thread.exit () 
+    end;
     () , CSet.add c opened_ports
 
   let get (c:'a in_port) opened_ports =
     debug "get_from_channel";
-    let in_ch, out_ch = match c.sock with
-      | None -> 
-          debug "get_from_channel_none";
-          let in_ch, out_ch = easy_connect c.host c.port_num in
-          c.sock <- Some ((in_ch, out_ch), RECEIVE);
-          Marshal.to_channel out_ch RECEIVE []; 
-          flush out_ch; in_ch, out_ch
-      | Some (chs, k) -> assert (k = RECEIVE); chs
-    in
-    Marshal.to_channel out_ch Get [];
-    flush out_ch;
-    (Marshal.from_channel in_ch : 'a), CSet.add c opened_ports
+    let res : 'a option ref = ref None in
+    begin
+    try
+      let in_ch, out_ch = match c.sock with
+        | None ->
+            debug "get_from_channel_none";
+            let in_ch, out_ch = easy_connect c.host c.port_num in
+            c.sock <- Some ((in_ch, out_ch), RECEIVE);
+            Marshal.to_channel out_ch RECEIVE []; 
+            flush out_ch; in_ch, out_ch
+        | Some (chs, k) -> assert (k = RECEIVE); chs
+      in
+      Marshal.to_channel out_ch Get [];
+      flush out_ch;
+      res := Some (Marshal.from_channel in_ch)
+    with
+      | End_of_file ->
+          print_error @@ Get_channel_invalid (c.host, c.port_num);
+          Thread.exit ()
+      | Failure f when f = "input_value: truncated object" ->
+          print_error @@ Get_channel_invalid (c.host, c.port_num);
+          Thread.exit ()
+      | Unix_error (err, _, _) ->
+          print_error @@ Get_channel_no_connect
+            (c.host, c.port_num, Unix.error_message err);
+          Thread.exit ()
+      | Sys_error err_msg ->
+          print_error @@ Get_channel_no_connect (c.host, c.port_num, err_msg);
+          Thread.exit ()
+    end;
+    match !res with
+    | Some a -> a, CSet.add c opened_ports
+    | None -> assert false
 
 
   let close_port port = match port.sock with
     | None -> ()
     | Some ((in_ch, out_ch), sock_kind) ->
         debug "try to close a port";
-        begin match sock_kind with
-          | SEND -> Marshal.to_channel out_ch PutEnd []
-          | RECEIVE -> Marshal.to_channel out_ch GetEnd [] end;
+        begin 
+          try
+            match sock_kind with
+            | SEND -> Marshal.to_channel out_ch PutEnd []
+            | RECEIVE -> Marshal.to_channel out_ch GetEnd [] 
+          with Sys_error err_msg ->
+            print_error @@ Close_port_err err_msg
+        end;
         flush out_ch; close_out out_ch;
         port.sock <- None
   
   let rec send_one_process proc =
     if Queue.is_empty computer_queue then
-      (* on suppose que on peut toujours connecté au noeud lui-même *)
-      Queue.push (Unix.gethostname (), !init_port) computer_queue;
+      if !add_self = false then
+        begin
+          Queue.push (hostname, !init_port) computer_queue;
+          add_self := true
+        end
+      else
+        begin
+          print_error No_computer;
+          exit 2
+        end;
     let exec_comp, corr_port = Queue.pop computer_queue in
     debug @@ "before_connect " ^ exec_comp;
     try
@@ -250,17 +307,18 @@ module Net: S = struct
       debug "after_connect";
       Marshal.to_channel out_ch (Msg proc) [Marshal.Closures];
       flush out_ch;
-      Queue.push (exec_comp, corr_port) computer_queue; in_ch
+      Queue.push (exec_comp, corr_port) computer_queue; 
+      exec_comp, in_ch
     with
       | Not_found ->
           print_error @@ Proc_dist_no_host exec_comp;
           send_one_process proc
-      | Unix_error (ECONNREFUSED, _, _) ->
-          print_error @@ Proc_dist_cannot_connect (exec_comp, corr_port);
+      | Unix_error (err, _, _) ->
+          print_error @@ Proc_dist_no_connect 
+            (exec_comp, corr_port, Unix.error_message err);
           send_one_process proc
-      (* | Unix_error (ETIMEOUT, _, _) *)
-      | Unix_error (ECONNRESET, _, _) ->
-          print_error @@ Proc_dist_peer_reset exec_comp;
+      | Sys_error err_msg ->
+          print_error @@ Proc_dist_no_connect (exec_comp, corr_port, err_msg);
           send_one_process proc
 
   (* penser à utiliser mutex pour cette fonction *)
@@ -280,10 +338,12 @@ module Net: S = struct
       match in_proc_lis, new_wait with
       | [], [] -> ()
       | [], _ -> wait_finished (List.rev new_wait) []
-      | (ch, proc)::ips, _ ->
+      | ((comp, ch), proc)::ips, _ ->
+          (* On vérifie l'état de chaque processus tout à tour, chacun pour 
+             une seconde. *)
           let rd, _, _ = Unix.select [Unix.descr_of_in_channel ch] [] [] 1. in
           let inch_proc = match rd with
-          | [] -> [(ch, proc)]
+          | [] -> [((comp, ch), proc)]
           | _ ->
               begin
                 try 
@@ -292,7 +352,7 @@ module Net: S = struct
                   close_in ch;
                   debug "one process finished"; []
                 with End_of_file ->
-                  print_error Doco_peer_reset;
+                  print_error @@ Doco_peer_reset comp;
                   shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
                   close_in ch; send_processes [proc]
               end;
@@ -318,25 +378,38 @@ module Net: S = struct
     debug @@ (string_of_int @@ CSet.cardinal opened_ports) ^ " port(s)";
     CSet.iter close_port opened_ports;
     debug "and close ports";
+    (* TODO: if the distributor is shut down *)
     output_string out_ch "END";
     flush out_ch; close_out out_ch;
     Thread.exit ()
 
   let listen_thread () =
-    let s = listen_port !init_port in
+    let s = try
+      listen_port !init_port 
+    with Unix_error (err, _, _) ->
+      print_error @@ Main_listen (!init_port, Unix.error_message err);
+      exit 1 in
     let rec accept_proc () =
       debug "new accept";
       let in_ch, out_ch = accept_sock s in
       debug "accept something";
-      match (Marshal.from_channel in_ch : 'a put_msg) with
-      | PutEnd -> 
-          debug "should terminate";
-          exit 0  (* on termine le programme, pas que le thread *)
-      | Msg (proc : unit process) -> 
-          debug "get process";
-          ignore (Thread.create (fun () -> 
-            Unix.handle_unix_error run_proc_thread (proc, out_ch)) ());
-          accept_proc ()
+      try
+        match (Marshal.from_channel in_ch : 'a put_msg) with
+        | PutEnd -> 
+            debug "should terminate";
+            exit 0  (* on termine le programme, pas que le thread *)
+        | Msg (proc : unit process) -> 
+            debug "get process";
+            ignore (Thread.create (fun () -> 
+              Unix.handle_unix_error run_proc_thread (proc, out_ch)) ());
+            accept_proc ()
+      with
+        | End_of_file ->
+            print_error Listen_invalid;
+            accept_proc ()
+        | Failure f when f = "input_value: truncated object" ->
+            print_error Listen_invalid;
+            accept_proc ()
     in
     accept_proc ()
 
@@ -358,16 +431,26 @@ module Net: S = struct
 
     Arg.parse options (fun str -> config_file := str) usage;
     let conf = open_in !config_file in
-    let rec add_peer in_ch =
+    let rec add_peer in_ch line_num =
       try
         let peer = input_line in_ch in
         debug peer;
-        let compu::port::_ = Str.split (Str.regexp "[ \t]+") peer in
-        Queue.push (compu, int_of_string port) computer_queue; 
-        add_peer in_ch
+        begin 
+          match Str.split (Str.regexp "[ \t]+") peer with
+          | [] -> ()
+          | [compu] -> 
+              (* Utilise le port 1024 par défault *)
+              Queue.push (compu, 1024) computer_queue
+          | compu::port::_ -> 
+              try 
+                Queue.push (compu, int_of_string port) computer_queue
+              with Failure f when f = "int_of_string" ->
+                print_error @@ Config_wrong_format line_num 
+        end;
+        add_peer in_ch @@ line_num + 1
       with End_of_file -> ()
     in
-    add_peer conf;
+    add_peer conf 1;
     curr_port := !init_port;
 
     if !wait then handle_unix_error listen_thread () 
@@ -382,10 +465,21 @@ module Net: S = struct
       Queue.iter
         (fun (computer, port) -> 
           if (computer, port) <> (hostname, !init_port) then
-          let _, out_ch = easy_connect computer port in
-          Marshal.to_channel out_ch PutEnd [];
-          debug "send PutEnd to terminate a program";
-          flush out_ch; close_out out_ch) computer_queue;
+            begin
+              try
+                let _, out_ch = easy_connect computer port in
+                Marshal.to_channel out_ch PutEnd [];
+                debug "send PutEnd to terminate a program";
+                flush out_ch; close_out out_ch
+              with 
+                | Unix_error (err, _, _) ->
+                    print_error @@ Terminate_program 
+                      (computer, port, Unix.error_message err)
+                | Sys_error err_msg ->
+                    print_error @@ Terminate_program (computer, port, err_msg)
+            end
+          else
+            add_self := true) computer_queue;
       res
 
   let run e = Unix.handle_unix_error run_aux e
