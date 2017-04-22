@@ -1,5 +1,5 @@
 OCAMLBUILD=ocamlbuild -classic-display \
-					  -pkgs lwt,lwt.unix,unix
+					  -pkgs lwt,lwt.unix,unix,str
 TARGET=native
 DIR=use_examples/
 
