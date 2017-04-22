@@ -5,6 +5,7 @@ type error_kind =
   | Config_wrong_format of int
   | Main_listen of int * string
   | Listen_invalid
+  | Listen_accept_fail of string
   | Channel_no_identification
   | Channel_in_invalid
   | Channel_request_invalid
@@ -36,6 +37,12 @@ let print_error_aux = function
       "The message that is received by the main listening process is invalid,"
       "ignored."
 
+  | Listen_accept_fail (err_msg) ->
+      Format.eprintf "Warning: @[%s@ %s (%s)@\n%s@]@."
+      "Problem occurs while the main listening process is trying to accept"
+      "connection." err_msg
+      "Retry ..."
+
   | Channel_no_identification ->
       Format.eprintf "Warning: @[%s@]@."
       "The channel cannot identify the type of connection, connectin ignored."
@@ -59,19 +66,19 @@ let print_error_aux = function
       "Waiting for another connection ..."
   
   | Put_channel_no_connect (hostname, port, err_msg) ->
-      Format.eprintf "Error: @[%s@ %d@ %s@ %s),@ %s@ (%s)@\n%s@]@."
+      Format.eprintf "Error: @[%s@ %d@ %s@ %s), %s@ (%s)@\n%s@]@."
       "Process cannot connect to the output channel (port" port "of computer" 
       hostname "it might have been shut down." err_msg
       "Process exiting ..."
 
   | Get_channel_no_connect (hostname, port, err_msg) ->
-      Format.eprintf "Error: @[%s@ %d@ %s@ %s),@ %s@ (%s)@\n%s@]@."
+      Format.eprintf "Error: @[%s@ %d@ %s@ %s), %s@ (%s)@\n%s@]@."
       "Process cannot connect to the input channel (port" port "of computer" 
       hostname "it might have been shut down." err_msg
       "Process exiting ..."
 
   | Get_channel_invalid (hostname, port) ->
-      Format.eprintf "Error: @[%s@ %d@ %s@ %s) @ %s@\n%s@]@."
+      Format.eprintf "Error: @[%s@ %d@ %s@ %s) %s@\n%s@]@."
       "The value received from the input channel (port" port "of computer"
       hostname "is invalid, the channel might have been closed."
       "Process exiting ..."

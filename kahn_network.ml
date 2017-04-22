@@ -10,8 +10,7 @@ open Kahn_network_error
 
 let debug str = 
   Mutex.lock mm;
-  if Thread.id (Thread.self ()) < 4 then
-    (Format.printf "%d: %s@." (Thread.id (Thread.self ())) str);
+  Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
   Mutex.unlock mm *)
 
 
@@ -391,9 +390,9 @@ module Net: S = struct
       exit 1 in
     let rec accept_proc () =
       debug "new accept";
-      let in_ch, out_ch = accept_sock s in
-      debug "accept something";
       try
+        let in_ch, out_ch = accept_sock s in
+        debug "accept something";
         match (Marshal.from_channel in_ch : 'a put_msg) with
         | PutEnd -> 
             debug "should terminate";
@@ -410,6 +409,10 @@ module Net: S = struct
         | Failure f when f = "input_value: truncated object" ->
             print_error Listen_invalid;
             accept_proc ()
+        | Unix_error (err, _, _) ->
+            print_error @@ Listen_accept_fail (Unix.error_message err);
+            accept_proc ()
+
     in
     accept_proc ()
 
