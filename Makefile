@@ -1,5 +1,5 @@
 OCAMLBUILD=ocamlbuild -classic-display \
-					  -pkgs lwt,lwt.unix,unix,str
+                      -pkgs lwt,lwt.unix,unix,str,graphics
 TARGET=native
 DIR=use_examples/
 
@@ -17,6 +17,9 @@ sift:
 
 sift_net:
 	$(OCAMLBUILD) $(DIR)SIFT_net.$(TARGET)
+
+mandel:
+	$(OCAMLBUILD) $(DIR)Mandelbrot.$(TARGET)
 
 clean:
 	$(OCAMLBUILD) -clean
