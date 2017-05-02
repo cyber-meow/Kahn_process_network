@@ -14,7 +14,7 @@ module Lwt_th: S = struct
     {s;push}, {s;push}
 
   let put v c = Lwt.return @@ c.push (Some v)
-  let get c = Lwt_stream.last_new c.s
+  let get c = Lwt_stream.next c.s
 
   let doco = Lwt.join
 

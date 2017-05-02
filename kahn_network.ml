@@ -432,7 +432,15 @@ module Net: S = struct
 
   let run_aux e =
 
-    Arg.parse options (fun str -> config_file := str) usage;
+    let current = ref 0 in
+    let rec rec_parse () =
+      try 
+        Arg.parse_argv ~current Sys.argv options 
+          (fun str -> config_file := str) usage
+      with Arg.Bad _ | Arg.Help _ -> rec_parse ()
+    in
+    rec_parse ();
+
     let conf = open_in !config_file in
     let rec add_peer in_ch line_num =
       try
