@@ -338,7 +338,7 @@ module Net: S = struct
       | [], [] -> ()
       | [], _ -> wait_finished (List.rev new_wait) []
       | ((comp, ch), proc)::ips, _ ->
-          (* On vérifie l'état de chaque processus tout à tour, chacun pour 
+          (* On vérifie l'état de chaque processus tour à tour, chacun pour 
              une seconde. *)
           let rec select_rec () =
             try
@@ -434,7 +434,7 @@ module Net: S = struct
       "must be used by all the peers except the principal one";
       "-port", Arg.Set_int init_port,
       "specify the main port that is used to communicate with other
-       computers (dafault: the port 1024), should be the same with the one 
+       computers (default: the port 1024), should be the same with the one 
        given in the configuration file";
       "-configfile", Arg.Set_string config_file,
       "the name of the configuration file for the network setup" ] 

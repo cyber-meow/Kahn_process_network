@@ -35,8 +35,8 @@ module Mandelbrot (K : Kahn.S) = struct
   let draw_partial zone iter_n qo =
     
     let {lb = (x1, y1); rt = (x2, y2); width; height} = zone in
-    let delta_x = (x2 -. x1) /. (float_of_int !w) in
-    let delta_y = (y2 -. y1) /. (float_of_int !h) in
+    let delta_x = (x2 -. x1) /. (float_of_int width) in
+    let delta_y = (y2 -. y1) /. (float_of_int height) in
     
     let next_point a b =
       if a +. delta_x < x2 then Some (a +. delta_x, b)
@@ -95,9 +95,9 @@ module Mandelbrot (K : Kahn.S) = struct
     in
     creating 0 []
 
-  let plot_in qin_lis = 
-    let w_convert = float_of_int !w /. 4. in
-    let h_convert = float_of_int !h /. 3. in
+  let plot_in w h qin_lis = 
+    let w_convert = float_of_int w /. 4. in
+    let h_convert = float_of_int h /. 3. in
     let rec plot_in_rec qis qis2 =
       match qis, qis2 with
       | [], [] -> K.return ()
@@ -115,7 +115,7 @@ module Mandelbrot (K : Kahn.S) = struct
     in
     (* Il est très important de mettre delay ici car on veut que
        la fenêtre d'affichage soit ouverte dans le processus *)
-    delay Graphics.open_graph (Format.sprintf " %dx%d" !w !h) >>=
+    delay Graphics.open_graph (Format.sprintf " %dx%d" w h) >>=
     fun () -> plot_in_rec qin_lis [] >>=
     fun () -> K.return (ignore (Graphics.read_key ()))
 
@@ -126,10 +126,10 @@ module Mandelbrot (K : Kahn.S) = struct
     fun zones ->
       let workers = 
         List.map2 (fun z ch -> draw_partial z iter_n (snd ch)) zones chs in
-      K.doco ((plot_in (List.map fst chs))::workers)
+      K.doco ((plot_in w h (List.map fst chs))::workers)
 
 
-  let usage = "usage: ./Mandelbrot [option]"
+  let usage = "Usage: ./Mandelbrot [option] \nOptions:"
   let options =
     [ "-h", Arg.Set_int h, 
       " number of pixels for the height (by default 600)" ;
