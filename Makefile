@@ -21,9 +21,6 @@ sift_net:
 mandel:
 	$(OCAMLBUILD) $(DIR)Mandelbrot.$(TARGET)
 
-mandel_net:
-	$(OCAMLBUILD) $(DIR)Mandelbrot_network.$(TARGET)
-
 clean:
 	$(OCAMLBUILD) -clean
 
