@@ -5,16 +5,16 @@ open Unix
 open Kahn_network_error
 
 
+let debug str = ()
+
 
 (*let mm = Mutex.create ()
 
 let debug str = 
   Mutex.lock mm;
   Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
-  Mutex.unlock mm *)
+  Mutex.unlock mm*)
 
-
-let debug str = ()
 
 module Prot = struct
 
@@ -300,7 +300,7 @@ module Net: S = struct
           exit 2
         end;
     let exec_comp, corr_port = Queue.pop computer_queue in
-    debug @@ "before_connect " ^ exec_comp;
+    debug @@ "before_connect " ^ exec_comp ^ " " ^ (string_of_int corr_port);
     try
       let in_ch, out_ch = easy_connect exec_comp corr_port in
       debug "after_connect";
@@ -340,7 +340,15 @@ module Net: S = struct
       | ((comp, ch), proc)::ips, _ ->
           (* On vérifie l'état de chaque processus tout à tour, chacun pour 
              une seconde. *)
-          let rd, _, _ = Unix.select [Unix.descr_of_in_channel ch] [] [] 1. in
+          let rec select_rec () =
+            try
+              Unix.select [Unix.descr_of_in_channel ch] [] [] 1.
+            with
+              Unix_error (err, _, _) ->
+                print_error @@ Wait_finish (Unix.error_message err);
+                select_rec ()
+          in
+          let rd, _, _ = select_rec () in
           let inch_proc = match rd with
           | [] -> [((comp, ch), proc)]
           | _ ->
@@ -418,6 +426,8 @@ module Net: S = struct
 
   
   let wait = ref false
+  let config_file = ref "network.config"
+  
   let usage = "usage: <program> [option]"
   let options = 
     [ "-wait", Arg.Set wait, 
@@ -425,21 +435,33 @@ module Net: S = struct
       "-port", Arg.Set_int init_port,
       "specify the main port that is used to communicate with other
        computers (dafault: the port 1024), should be the same with the one 
-       given in the configuration file"]
+       given in the configuration file";
+      "-configfile", Arg.Set_string config_file,
+      "the name of the configuration file for the network setup" ] 
   
-  let config_file = ref "network.config"
-
 
   let run_aux e =
 
+    let new_argv = Array.make (Array.length Sys.argv) "" in
+    let new_argv_ind = ref 0 in
+
+    let update_new_argv str =
+      new_argv.(!new_argv_ind) <- str;
+      incr new_argv_ind
+    in
+    update_new_argv Sys.argv.(0);
+
     let current = ref 0 in
+
     let rec rec_parse () =
       try 
         Arg.parse_argv ~current Sys.argv options 
-          (fun str -> config_file := str) usage
-      with Arg.Bad _ | Arg.Help _ -> rec_parse ()
+          (fun str -> update_new_argv str) usage
+      with Arg.Bad _ | Arg.Help _ -> 
+        update_new_argv (Sys.argv.(!current)); rec_parse ()
     in
     rec_parse ();
+    Array.blit new_argv 0 Sys.argv 0 (Array.length Sys.argv);
 
     let conf = open_in !config_file in
     let rec add_peer in_ch line_num =

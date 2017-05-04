@@ -117,7 +117,7 @@ module Mandelbrot (K : Kahn.S) = struct
        la fenêtre d'affichage soit ouverte dans le processus *)
     delay Graphics.open_graph (Format.sprintf " %dx%d" !w !h) >>=
     fun () -> plot_in_rec qin_lis [] >>=
-    (fun () -> K.return (Unix.pause ()))
+    fun () -> K.return (ignore (Graphics.read_key ()))
 
 
   let distribute_image (x1, y1) (x2, y2) w h w_div h_div iter_n =
@@ -132,22 +132,24 @@ module Mandelbrot (K : Kahn.S) = struct
   let usage = "usage: ./Mandelbrot [option]"
   let options =
     [ "-h", Arg.Set_int h, 
-      "number of pixels for the height (by default 600)" ;
+      " number of pixels for the height (by default 600)" ;
       "-w", Arg.Set_int w, 
-      "number of pixels for the width (by default 800)" ;
+      " number of pixels for the width (by default 800)" ;
       "-wd", Arg.Set_int w_div, 
-      "number of divisions of width for parallel processing, must divide w" ;
+      " number of divisions of width for parallel processing, " ^
+      "must divide w (by default 5)" ;
       "-hd", Arg.Set_int h_div, 
-      "number of divisions of height for parallel processing, must divide h" ;
+      " number of divisions of height for parallel processing, " ^
+      " must divide h (by default 4)" ;
       "-iter", Arg.Set_int iter,
-      "number of iterations used to compute the Mandelbrot set" ]
+      " number of iterations used to compute the Mandelbrot set" ]
 
   let main =
-    delay (Arg.parse options (fun _ -> ())) usage >>=
+    delay (Arg.parse (Arg.align options) (fun _ -> ())) usage >>=
     fun () -> distribute_image (-2., -1.5) (2., 1.5) !w !h !w_div !h_div !iter
 
 end
 
-module Mandel = Mandelbrot(Kahn_proc.Proc)
+module Mandel = Mandelbrot(Kahn_network.Net)
 
 let () = Mandel.K.run Mandel.main
