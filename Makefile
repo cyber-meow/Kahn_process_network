@@ -16,10 +16,13 @@ sift:
 	$(OCAMLBUILD) $(DIR)SIFT.$(TARGET)
 
 sift_net:
-	$(OCAMLBUILD) $(DIR)SIFT_net.$(TARGET)
+	$(OCAMLBUILD) $(DIR)SIFT_network.$(TARGET)
 
 mandel:
 	$(OCAMLBUILD) $(DIR)Mandelbrot.$(TARGET)
+
+pong:
+	$(OCAMLBUILD) $(DIR)pong_dist.$(TARGET)
 
 clean:
 	$(OCAMLBUILD) -clean

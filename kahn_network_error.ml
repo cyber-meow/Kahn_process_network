@@ -15,6 +15,7 @@ type error_kind =
   | Get_channel_invalid of string * int
   | Proc_dist_no_host of string
   | Proc_dist_no_connect of string * int * string
+  | Wait_finish of string 
   | Doco_peer_reset of string
   | No_computer
   | Close_port_err of string
@@ -95,6 +96,10 @@ let print_error_aux = function
       "peer might have been shut down.  The node is elimated from the "
       "distribution list." err_msg
       "Continue to distribute processes ..."
+
+  | Wait_finish err_msg ->
+      Format.eprintf "Warning: %s@ (%s)@."
+      "System error while waiting processes to finish, ignored." err_msg
 
   | Doco_peer_reset hostname -> 
       Format.eprintf "Warning: @[%s@ %s@ %s@ %s@\n%s@ %s@]@."
