@@ -1,4 +1,10 @@
 
+(*************************************************************)
+(*                                                           *)
+(* The network version of SIFT.ml for ocaml <= 4.02          *)
+(*                                                           *)
+(*************************************************************)
+
 module K = Kahn_network.Net
 module Lib = Kahn.Lib(K)
 open Lib

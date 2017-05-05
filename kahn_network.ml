@@ -428,7 +428,7 @@ module Net: S = struct
   let wait = ref false
   let config_file = ref "network.config"
   
-  let usage = "usage: <program> [option]"
+  let usage = "usage: ^ Sys.argv.(0)" ^ " [option]"
   let options = 
     [ "-wait", Arg.Set wait, 
       "must be used by all the peers except the principal one";
@@ -436,7 +436,7 @@ module Net: S = struct
       "specify the main port that is used to communicate with other
        computers (default: the port 1024), should be the same with the one 
        given in the configuration file";
-      "-configfile", Arg.Set_string config_file,
+      "-config", Arg.Set_string config_file,
       "the name of the configuration file for the network setup" ] 
   
 

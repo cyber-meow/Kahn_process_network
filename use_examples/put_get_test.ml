@@ -1,5 +1,14 @@
 
-module Example (K : Kahn.S) = struct
+(************************************************************************)
+(*                                                                      *)
+(* The very basic example that illustrates the use of the KPN library   *)
+(*                                                                      *)
+(* The producer puts a 2 in a channel;                                  *)
+(* the consommator receives it and prints it.                           *)
+(*                                                                      *)
+(************************************************************************)
+
+module Put_get (K : Kahn.S) = struct
 
   module K = K
   module Lib = Kahn.Lib(K)
@@ -12,6 +21,5 @@ module Example (K : Kahn.S) = struct
 
 end
 
-module E = Example(Kahn_network.Net)
-
-let () = E.K.run E.main
+module PG = Impls.Choose_impl(Put_get)
+let () = PG.run ()
