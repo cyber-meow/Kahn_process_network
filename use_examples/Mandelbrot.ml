@@ -150,6 +150,20 @@ module Mandelbrot (K : Kahn.S) = struct
 
 end
 
-module Mandel = Mandelbrot(Kahn_network.Net)
+
+let choose_impl = function
+  | "th" -> (module Kahn_th.Th: Kahn.S)
+  | "proc" -> (module Kahn_proc.Proc: Kahn.S)
+  | "seq" -> (module Kahn_seq.Seq: Kahn.S)
+  | "lwt" -> (module Kahn_lwt.Lwt_th: Kahn.S)
+  | "net" -> (module Kahn_network.Net: Kahn.S)
+  | str -> 
+      Format.eprintf "Error: %s %s@ %s@."
+      "unknown implementation option" str
+      "Possible implementation choices: seq, lwt, th, proc, net"; exit 1
+
+
+module K = (val (choose_impl "ne"))
+module Mandel = Mandelbrot(K)
 
 let () = Mandel.K.run Mandel.main
