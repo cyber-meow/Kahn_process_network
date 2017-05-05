@@ -1,4 +1,14 @@
 
+(**************************************************************************)
+(*                                                                        *)
+(* Distributed sieve of Erastothenes algorithm KPN implementation         *)
+(*                                                                        *)
+(* Reference:                                                             *)
+(*  Gilles Kahn and David Macqueen,                                       *)
+(*  Coroutines and networks of parallel processes                         *)
+(*                                                                        *)
+(**************************************************************************)
+
 module SIFT (K : Kahn.S) = struct
 
   module K = K
@@ -38,6 +48,5 @@ module SIFT (K : Kahn.S) = struct
 
 end
 
-module SI = SIFT(Kahn_lwt.Lwt_th)
-
-let () = SI.K.run SI.main
+module SI = Impls.Choose_impl(SIFT)
+let () = SI.run ()

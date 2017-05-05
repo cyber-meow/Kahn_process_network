@@ -1,4 +1,13 @@
 
+(************************************************************************)
+(*                                                                      *)
+(* A simple example illustrating the use of the KPN library             *)
+(*                                                                      *)
+(* The producer puts integers in the channel in a infite loop and the   *)
+(* consommator prints out the values received from the channel.         *)
+(*                                                                      *)
+(************************************************************************)
+
 module Example (K : Kahn.S) = struct
 
   module K = K
@@ -23,6 +32,5 @@ module Example (K : Kahn.S) = struct
 
 end
 
-module E = Example(Kahn_network.Net)
-
-let () = E.K.run E.main
+module E = Impls.Choose_impl(Example)
+let () = E.run ()

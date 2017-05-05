@@ -1,4 +1,17 @@
 
+(************************************************************************)
+(*                                                                      *)
+(* A distributed pong game KPN implementation                           *)
+(*                                                                      *)
+(* Modified from the TP code of the ENS L3 system course                *)
+(*                                                                      *)
+(* The game must be played on exactly two computers.                    *)
+(* On the first computer the program is lauched with the option -wait   *)
+(* On the second computer the program is then launched directly with    *)
+(* the parameters that are related to the game (see below)              *)
+(*                                                                      *)
+(************************************************************************)
+
 module K = Kahn_network.Net
 module Lib = Kahn.Lib(K)
 open Lib
@@ -175,6 +188,8 @@ let player_server length width pad_size pad_size_2
   in
   delay (init_graph length) width >>= fun () -> player_server init_state
 
+
+(* - Launch the program - *)
 
 let main =
   delay config_parse () >>= 

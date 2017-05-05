@@ -1,4 +1,16 @@
 
+(****************************************************************************)
+(*                                                                          *)
+(* Parallel computing of the Mandelbrot set in a KPN model                  *)
+(*                                                                          *)
+(* The whole image is divided into several different zones and each process *)
+(* is responsible for the computation of one zone, only one display.        *)
+(* Please see the end of the code body for a detailed description of        *)
+(* command line arguments.                                                  *)
+(*                                                                          *)
+(****************************************************************************)
+
+
 module Mandelbrot (K : Kahn.S) = struct
 
   module K = K
@@ -136,11 +148,12 @@ module Mandelbrot (K : Kahn.S) = struct
       "-w", Arg.Set_int w, 
       " number of pixels for the width (by default 800)" ;
       "-wd", Arg.Set_int w_div, 
-      " number of divisions of width for parallel processing, " ^
-      "must divide w (by default 5)" ;
+      Format.sprintf
+      " number of divisions of width for parallel processing, "
+      ^ "must divide w\n" ^ String.make 10 ' ' ^ "(by default 5)" ;
       "-hd", Arg.Set_int h_div, 
       " number of divisions of height for parallel processing, " ^
-      " must divide h (by default 4)" ;
+      " must divide h\n" ^ String.make 10 ' ' ^ "(by default 4)" ;
       "-iter", Arg.Set_int iter,
       " number of iterations used to compute the Mandelbrot set" ]
 
@@ -150,6 +163,6 @@ module Mandelbrot (K : Kahn.S) = struct
 
 end
 
-module Mandel = Mandelbrot(Kahn_network.Net)
 
-let () = Mandel.K.run Mandel.main
+module Mandel = Impls.Choose_impl(Mandelbrot)
+let () = Mandel.run ()
