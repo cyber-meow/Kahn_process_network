@@ -1,4 +1,22 @@
 
+(****************************************************************************)
+(*                                                                          *)
+(* Parallel k-means clustering in KPN framework                             *)
+(*                                                                          *)
+(* K-means clustering is a method of vector quantization, originally from   *)
+(* signal processing, that is popular for cluster analysis in data mining.  *)
+(* K-means clustering aims to partition n observations into k clusters in   *)
+(* which each observation belongs to the cluster with the nearest mean      *)
+(* serving as a prototype of the cluster.                        -Wikipidea *)
+(*                                                                          *)
+(* A input file that contains exactly one data point [coordinates separated *)
+(* by spaces] each line should be given as the command line argument.       *)
+(* For more specifications please see near line 200 of the code body.       *)
+(* We use a random initilization for the clusters.                          *)
+(*                                                                          *)
+(****************************************************************************)
+
+
 module Vector = struct
 
   type vector = float array
