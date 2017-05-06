@@ -71,12 +71,12 @@ module Mandelbrot (K : Kahn.S) = struct
     
     if w mod w_div <> 0 then
       begin
-        Format.eprintf "Error: w_div must be a factor of w@."; 
+        Format.eprintf "%s: wd must be a factor of w@." Sys.argv.(0); 
         exit 1
       end;
     if h mod h_div <> 0 then
       begin
-        Format.eprintf "Error: h_div must be a factor of h@."; 
+        Format.eprintf "%s: hd must be a factor of h@." Sys.argv.(0); 
         exit 1
       end;
       
@@ -142,6 +142,7 @@ module Mandelbrot (K : Kahn.S) = struct
 
 
   let usage = "Usage: " ^ Sys.argv.(0) ^ " [option] \nOptions:"
+
   let options =
     [ "-h", Arg.Set_int h, 
       " number of pixels for the height (by default 600)" ;
@@ -157,8 +158,21 @@ module Mandelbrot (K : Kahn.S) = struct
       "-iter", Arg.Set_int iter,
       " number of iterations used to compute the Mandelbrot set" ]
 
+  let parse_cmd () =
+    Arg.parse (Arg.align options) (fun _ -> ()) usage;
+    let args = 
+      [!h, "h"; !w, "w"; !w_div, "wd"; !h_div, "hd"; !iter, "iter"] 
+    in
+    try
+      let invalid_arg = List.find (fun (value, _) -> value <= 0) args in
+      Format.eprintf 
+        "%s: %s can only take positive value@." 
+        Sys.argv.(0) @@ snd invalid_arg;
+      exit 1
+    with Not_found -> ()
+
   let main =
-    delay (Arg.parse (Arg.align options) (fun _ -> ())) usage >>=
+    delay parse_cmd () >>=
     fun () -> distribute_image (-2., -1.5) (2., 1.5) !w !h !w_div !h_div !iter
 
 end

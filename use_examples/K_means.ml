@@ -154,9 +154,9 @@ module K_means (K : Kahn.S) = struct
 
   let k_means iter points dim k num_workers qo_final =
     let n = Array.length points in
-    if n > k then
+    if n < k then
         invalid_arg "k_means: Cannot have more clusters than data points";
-    if n > num_workers then
+    if n < num_workers then
         invalid_arg "k_means: Must have fewer workers than data points";
     for i = 0 to n-1 do
       if Array.length points.(i) <> dim then
@@ -185,35 +185,56 @@ end
 module K_means_exe (K : Kahn.S) = struct
 
   module K_means = K_means(K)
+  module Lib = Kahn.Lib(K)
 
   let d = ref None
-  let k = ref None
-  let datafile = ref None
+  let k = ref 8
+  let iter = ref 300
+  let num_workers = ref 10
+  let data_file = ref None
   let output_file = ref "clusters.txt"
 
   let usage = 
-    "Usage: " ^ Sys.argv.(0) ^ " -k <clusterNumber> [options] <filename>" ^
+    "Usage: " ^ Sys.argv.(0) ^ " [options] <filename>" ^
     "\nOptions:"
+
   let options =
-    [ "-k", Arg.Int (fun i -> k := Some i),
-      "number of clusters k in the algorithm";
+    [ "-k", Arg.Set_int k,
+      " number of clusters k in the algorithm (default 8)";
       "-d", Arg.Int (fun i -> d := Some i),
-      "dimension of data examples (must be consistent with the data";
-      "-p",
-      "number of parallel processes used in the computation"
-      "-i",
-      "number of iterations to run"
+      " dimension of data examples (must be consistent with the data";
+      "-p", Arg.Set_int num_workers,
+      " number of parallel processes used in the computation (default 10)";
+      "-i", Arg.Set_int iter,
+      " number of iterations to run (default 300)";
       "-o", Arg.Set_string output_file,
-      "name of the output file (containing cluster centers)" ]
+      " name of the output file (containing cluster centers)" ]
 
   let parse_cmd () =
-    Arg.parse options 
-      (fun str -> 
-        match !datafile with 
-        | None -> datafile := Some str
+    Arg.parse (Arg.align options)
+      (fun str -> if str <> "" then
+        match !data_file with 
+        | None -> data_file := Some str
         | _ -> Format.eprintf 
             "%s: At most one data file can be given.@." Sys.argv.(0); exit 1)
       usage
+    
+  let check_parse () =
+    let data_file = 
+      match !data_file with
+      | None -> 
+          Format.eprintf "%s: %s@\nuse --help for more information@."
+          Sys.argv.(0) "data file name missing"; exit 1
+      | Some data_file -> data_file
+    in
+    let args = [!k, "k"; !num_workers, "p"; !iter, "i"] in
+    try
+      let invalid_arg = List.find (fun (value, _) -> value <= 0) args in
+      Format.eprintf 
+        "%s: %s can only take positive value@."
+        Sys.argv.(0) @@ snd invalid_arg; 
+      exit 1
+    with Not_found -> data_file
 
   let parse_point ?d line_num str =
     let str_sp = Array.of_list @@ Str.split (Str.regexp "[ \t]+") str in
@@ -257,11 +278,11 @@ module K_means_exe (K : Kahn.S) = struct
         points_from_file (line_num+1) (p_vect::points)
       with End_of_file -> points
     in
-    points_from_file line_num points
+    points_from_file line_num points, d
 
   let printout_clusters out_ch points =
     let out = Format.formatter_of_out_channel out_ch in
-    Format.fprintf out "cluster centers:@\n";
+    Format.fprintf out "cluster centers:@\n@\n";
     Array.iter 
       (fun point -> 
         Format.fprintf out "%s@\n" @@ 
@@ -269,4 +290,28 @@ module K_means_exe (K : Kahn.S) = struct
       points;
     Format.fprintf out "@?"
 
+  let main = Lib.(
+    delay parse_cmd () >>=
+    fun () -> 
+      let data_file = check_parse () in
+      let in_ch = open_in data_file in
+      let points, d = points_from_file ?d:!d in_ch in
+      let points = Array.of_list points in
+      close_in in_ch;
+      K.return @@ K.new_channel () >>=
+    fun (q_in, q_out) -> 
+      try 
+        K_means.k_means !iter points d !k !num_workers q_out >>=
+        fun () -> K.get q_in >>=
+        fun centers -> 
+          let out_ch = open_out !output_file in
+          printout_clusters out_ch centers;
+          K.return (close_out out_ch)
+      with Invalid_argument err_msg ->
+        Format.eprintf "%s: %s@." Sys.argv.(0) err_msg; exit 10)
+
 end
+
+
+module K_means_run = Impls.Choose_impl(K_means_exe)
+let () = K_means_run.run ()
