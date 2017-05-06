@@ -4,8 +4,8 @@
 (* Distributed sieve of Erastothenes algorithm KPN implementation         *)
 (*                                                                        *)
 (* Reference:                                                             *)
-(*  Gilles Kahn and David Macqueen,                                       *)
-(*  Coroutines and networks of parallel processes                         *)
+(* Gilles Kahn and David Macqueen,                                        *)
+(* Coroutines and networks of parallel processes                          *)
 (*                                                                        *)
 (**************************************************************************)
 
