@@ -9,9 +9,13 @@ module Vector = struct
   let (--) = Array.map2 (-.)
 
   let norm2 vect = 
-    Array.fold_left (+.) 0. (Array.map (fun x -> x *. x) vect)
+    vect |> Array.map (fun x -> x *. x) |> Array.fold_left (+.) 0.
 
-  let dis_square vect1 vect2 = norm2 @@ vect1--vect2
+  let dis_square vect1 vect2 = vect1--vect2 |> norm2
+  
+  let string_of_vector vect =
+    vect |> Array.map string_of_float |> Array.to_list |> 
+    String.concat ", " |> Format.sprintf "(%s)"
 
 end
 
@@ -49,37 +53,50 @@ module K_means (K : Kahn.S) = struct
 
   (* Chaque ouvrier fait les calculs pour une partie de points *) 
 
-  let worker iter qin qout =
-    let rec step points i =
+  let worker iter points qin qout =
+    let rec step i =
       if i = iter then K.return ()
       else
         K.get qin >>=
         fun centers ->
           let num_sum = cal_dist points centers in
           K.put num_sum qout >>=
-        fun () -> step points (i+1)
+        fun () -> step (i+1)
     in
-    K.get qin >>= fun points -> step points 0
+    step 0
 
   (* Communiquer avec plusieurs canaux *)
 
-  let rec put_chs out_msg = function
+  let rec put_one_chs out_msg = function
     | [] -> K.return ()
-    | qo::qos -> K.put out_msg qo >>= fun () -> put_chs out_msg qos
+    | qo::qos -> K.put out_msg qo >>= fun () -> put_one_chs out_msg qos
+
+  let rec put_chs out_msgs q_outs = 
+    match out_msgs, q_outs with
+    | [], [] -> K.return ()
+    | [], _ | _, [] -> invalid_arg "put_chs: lists not the same size"
+    | m::ms, qo::qos -> K.put m qo >>= fun () -> put_chs ms qos
 
   let rec get_chs in_msgs = function
     | [] -> K.return in_msgs
     | qi::qis -> K.get qi >>= fun in_msg -> get_chs (in_msg::in_msgs) qis
 
+  let create_channels k =
+    let rec creating i chs =
+      if i = k then chs
+      else creating (i+1) (K.new_channel()::chs)
+    in
+    creating 0 []
+
   (* Le patron distribue les points et fait la somme pour les données reçus *)
 
-  let master iter qins qouts init_centers =
+  let master iter init_centers qins qouts qo_final =
     let d = Array.length init_centers.(0) in
     let k = Array.length init_centers in
     let rec step centers i =
-      if i = iter then K.return centers
+      if i = iter then K.put centers qo_final
       else
-        put_chs centers qouts >>=
+        put_one_chs centers qouts >>=
         fun () -> get_chs [] qins >>=
         fun num_sums ->
           let num_sum' =
@@ -98,7 +115,7 @@ module K_means (K : Kahn.S) = struct
     in
     step init_centers 0
 
-  (* Diviser l'ensemble de points en n partie d'à peu près même tailles *)
+  (* Diviser l'ensemble de points en n partie de tailles similaires *)
 
   let divide_points points m =
     let n = Array.length points in
@@ -116,7 +133,140 @@ module K_means (K : Kahn.S) = struct
     in
     div_array [] 0
 
-  (* random_permu, init_center, kmeans *)
+  (* In place random permutation of an array *)
+
+  let random_permu arr =
+    Random.self_init ();
+    let n = Array.length arr in
+    for i = 0 to n-2 do
+      let k = Random.int (n-i) in
+      let tmp = arr.(i) in
+      arr.(i) <- arr.(i+k);
+      arr.(i+k) <- tmp 
+    done
+
+  (* L'initialisation pour les centres des clusters *)
+
+  let init_centers points k =
+    Array.sub points 0 k
+
+  (* The parallel k-means algorithm, side effect on the array points *)
+
+  let k_means iter points dim k num_workers qo_final =
+    let n = Array.length points in
+    if n > k then
+        invalid_arg "k_means: Cannot have more clusters than data points";
+    if n > num_workers then
+        invalid_arg "k_means: Must have fewer workers than data points";
+    for i = 0 to n-1 do
+      if Array.length points.(i) <> dim then
+        invalid_arg "k_means: Dimension of data point is not as specified"
+    done;
+    random_permu points;
+    let point_partitions = divide_points points num_workers in
+    let init_centers = init_centers points k in
+    let point_chs = create_channels num_workers in
+    let num_sum_chs = create_channels num_workers in
+    let master =
+      master iter init_centers 
+        (List.map fst num_sum_chs) (List.map snd point_chs) qo_final
+    in
+    let workers = 
+      List.map2 
+        (fun pset (qin, qout) -> worker iter pset qin qout) 
+        point_partitions @@
+        List.combine (List.map fst point_chs) (List.map snd num_sum_chs)
+    in
+    K.doco @@ master::workers
 
 end
 
+
+module K_means_exe (K : Kahn.S) = struct
+
+  module K_means = K_means(K)
+
+  let d = ref None
+  let k = ref None
+  let datafile = ref None
+  let output_file = ref "clusters.txt"
+
+  let usage = 
+    "Usage: " ^ Sys.argv.(0) ^ " -k <clusterNumber> [options] <filename>" ^
+    "\nOptions:"
+  let options =
+    [ "-k", Arg.Int (fun i -> k := Some i),
+      "number of clusters k in the algorithm";
+      "-d", Arg.Int (fun i -> d := Some i),
+      "dimension of data examples (must be consistent with the data";
+      "-p",
+      "number of parallel processes used in the computation"
+      "-i",
+      "number of iterations to run"
+      "-o", Arg.Set_string output_file,
+      "name of the output file (containing cluster centers)" ]
+
+  let parse_cmd () =
+    Arg.parse options 
+      (fun str -> 
+        match !datafile with 
+        | None -> datafile := Some str
+        | _ -> Format.eprintf 
+            "%s: At most one data file can be given.@." Sys.argv.(0); exit 1)
+      usage
+
+  let parse_point ?d line_num str =
+    let str_sp = Array.of_list @@ Str.split (Str.regexp "[ \t]+") str in
+    begin 
+      match d with 
+      | None -> ()
+      | Some d ->
+          if Array.length str_sp <> d then
+          begin
+            Format.eprintf 
+              "%s: %s@ (expected %d but %d found)@."
+              Sys.argv.(0) "inconsistent data point dimension" 
+              d (Array.length str_sp);
+            exit 1
+          end
+    end;
+    try Array.map float_of_string str_sp
+    with Failure str when str = "float_of_string" ->
+      Format.eprintf 
+        "%s: line %d of the data file, input format incorrect@." 
+        Sys.argv.(0) line_num;
+      exit 1
+      
+  let rec points_from_file ?d in_ch =
+    let d, points, line_num = 
+      match d with
+      | None ->
+          begin
+            try
+              let l = input_line in_ch in
+              let p_vect = parse_point 0 l in
+              Array.length p_vect, [p_vect], 2
+            with End_of_file -> -1, [], 0
+          end
+      | Some d -> d, [], 1
+    in
+    let rec points_from_file line_num points =
+      try
+        let l = input_line in_ch in
+        let p_vect = parse_point ~d line_num l in
+        points_from_file (line_num+1) (p_vect::points)
+      with End_of_file -> points
+    in
+    points_from_file line_num points
+
+  let printout_clusters out_ch points =
+    let out = Format.formatter_of_out_channel out_ch in
+    Format.fprintf out "cluster centers:@\n";
+    Array.iter 
+      (fun point -> 
+        Format.fprintf out "%s@\n" @@ 
+        Vector.string_of_vector point)
+      points;
+    Format.fprintf out "@?"
+
+end

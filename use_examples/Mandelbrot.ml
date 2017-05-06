@@ -141,7 +141,7 @@ module Mandelbrot (K : Kahn.S) = struct
       K.doco ((plot_in w h (List.map fst chs))::workers)
 
 
-  let usage = "Usage: ./Mandelbrot [option] \nOptions:"
+  let usage = "Usage: " ^ Sys.argv.(0) ^ " [option] \nOptions:"
   let options =
     [ "-h", Arg.Set_int h, 
       " number of pixels for the height (by default 600)" ;
