@@ -76,6 +76,7 @@ trolle
 trolle 12345
 tulipier
 ```
+Notice that when a peer is shut down during the execution, the whole program may or may not continue to work corretly since all the KPN processes that are stopped abnormally will simply be restarted from the beginning. 
 
 #### Related to the command line parsing
 I spent some time trying to find a way that allows us to do the command line parsing in different places of the OCaml code, but I was not able to find a perfect way to solve the problem.  So after the command line parsing of the network implementation (and the same for the functor `Choose_impl`), there may be empty strings as command line arguments.  The main program must ignore them .  One can also consider to include the specifications of differnt options listed above in their error message.
