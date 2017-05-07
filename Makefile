@@ -6,26 +6,29 @@ DIR=use_examples/
 put_get:
 	$(OCAMLBUILD) $(DIR)put_get_test.$(TARGET)
 
-int_generator:
-	$(OCAMLBUILD) $(DIR)int_generator.$(TARGET)
+int_printer:
+	$(OCAMLBUILD) $(DIR)int_printer.$(TARGET)
 
-sift:
-	$(OCAMLBUILD) $(DIR)SIFT.$(TARGET)
+alter_print:
+	$(OCAMLBUILD) $(DIR)alter_print.$(TARGET)
 
-mandel:
+prime_sieve:
+	$(OCAMLBUILD) $(DIR)sieve_Eratosthenes.$(TARGET)
+
+mandelbrot:
 	$(OCAMLBUILD) $(DIR)Mandelbrot.$(TARGET)
 
 pong:
 	$(OCAMLBUILD) $(DIR)pong_dist.$(TARGET)
 
-kmeans:
-	$(OCAMLBUILD) $(DIR)K_means.$(TARGET)
+k_means:
+	$(OCAMLBUILD) $(DIR)k_means.$(TARGET)
 
-int_generator_net:
-	$(OCAMLBUILD) $(DIR)int_generator_network.$(TARGET)
+int_printer_net:
+	$(OCAMLBUILD) $(DIR)int_printer_network.$(TARGET)
 
-sift_net:
-	$(OCAMLBUILD) $(DIR)SIFT_network.$(TARGET)
+prime_sieve_net:
+	$(OCAMLBUILD) $(DIR)sieve_Eratosthenes_network.$(TARGET)
 
 
 
