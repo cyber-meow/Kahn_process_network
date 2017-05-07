@@ -159,12 +159,14 @@ module Net: S = struct
     Set.Make(struct type t = channel let compare = compare end)
   
   type distributor = out_channel option
-
-  type 'a process = CSet.t -> 'a future -> distributor -> 'a * CSet.t 
-  and 'a future = Next of ('a -> unit process)
-
-  let end_process = Next (fun _ _ _ _ -> (), CSet.empty)
-
+  
+  type 'a process = 
+    { run: CSet.t -> distributor -> 'a * CSet.t; step: 'a process_step }
+  
+  and _ process_step =
+    | Atom: 'a process_step
+    | Bind: ('b -> 'a process) -> 'a process_step
+  
   type 'a in_port = channel
   type 'a out_port = channel
 
@@ -212,7 +214,7 @@ module Net: S = struct
     ch1, ch2
 
 
-  let put v c opened_ports _ _ =
+  let put_run v c opened_ports _ =
     debug "put_something";
     begin 
     try
@@ -241,8 +243,10 @@ module Net: S = struct
     end;
     () , CSet.add c opened_ports
 
+  let put v c = { run = put_run v c ; step = Atom }
 
-  let get (c:'a in_port) opened_ports _ _ =
+
+  let get_run (c:'a in_port) opened_ports _ =
     debug "get_from_channel";
     let res : 'a option ref = ref None in
     begin
@@ -277,6 +281,8 @@ module Net: S = struct
     match !res with
     | Some a -> a, CSet.add c opened_ports
     | None -> assert false
+
+  let get c = { run = get_run c ; step = Atom }
 
 
   let close_port port = match port.sock with
@@ -334,7 +340,7 @@ module Net: S = struct
       (fun in_lis proc -> (send_one_process proc, proc) :: in_lis) []
 
 
-  let doco l opened_ports _ _ =
+  let doco_run l opened_ports _ =
     debug "doco";
     CSet.iter close_port opened_ports;
     debug "finish_close_ports";
@@ -363,7 +369,7 @@ module Net: S = struct
           | _ ->
               begin
                 try
-                  match (Marshal.from_channel ch : unit process put_msg) with
+                  match (Marshal.from_channel ch : 'a put_msg) with
                   | Msg proc' ->
                       debug "process feedback from children";
                       [(comp, ch), proc']
@@ -386,36 +392,43 @@ module Net: S = struct
     wait_finished in_proc_lis [];
     (), CSet.empty
 
-    
-  let return v opened_ports _ _ =
-    debug "return"; v, opened_ports
+  let doco l = { run = doco_run l ; step = Atom }
 
-  let rec bind : 
-    type a b. a process -> (a -> b process) -> b process =
-  fun p f opened_ports (Next k) distributor ->
+    
+  let return v =
+    debug "return"; 
+    { run = (fun opened_ports _ -> v, opened_ports) ; step = Atom }
+
+  let rec bind_run p f opened_ports distributor =
     debug "bind";
-    let res, opened_ports' = 
-      p opened_ports (Next (fun res -> bind (f res) k)) distributor in
-    let rest_proc : unit process = bind (f res) k in
-    (*
+    let res, opened_ports' = p.run opened_ports distributor in
+    let next_proc = bind_step p f res in
     begin
       match distributor with
       | None -> ()
       | Some out_ch ->
           try
-            Marshal.to_channel out_ch (Msg rest_proc) [Marshal.Closures];
+            Marshal.to_channel out_ch (Msg next_proc) [Marshal.Closures];
             flush out_ch
           with Sys_error err_msg ->
             print_error @@ Dist_shutdown err_msg;
             Thread.exit ()
-    end;*)
-    f res opened_ports' (Next k) distributor
+    end;
+    f res opened_ports' distributor
+
+  and bind_step: type t. 'a process -> ('a -> 'b process) -> t -> 'b process = 
+    fun p f a -> 
+      match p.step with
+      | Atom -> f a
+      | Bind step -> bind (step a) f
+
+  and bind p f =
+    { run = bind_run p f ; step = Bind (bind_step p f) }
 
 
   let run_proc_thread ((proc : unit process), out_ch) =
     debug "try to run a proc";
-    let (), opened_ports =
-      proc CSet.empty end_process (Some out_ch) in
+    let (), opened_ports = proc.run CSet.empty (Some out_ch) in
     debug "this process end";
     debug @@ (string_of_int @@ CSet.cardinal opened_ports) ^ " port(s)";
     CSet.iter close_port opened_ports;
@@ -529,12 +542,12 @@ module Net: S = struct
     else
       ignore (Thread.create (handle_unix_error listen_thread) ());
       debug "before exe";
-      let res, opened_ports = e CSet.empty end_process None in
+      let res, opened_ports = e.run CSet.empty None in
       CSet.iter close_port opened_ports;
       debug "program should terminate";
       debug @@ string_of_int @@ Queue.length computer_queue;
       Queue.iter
-        (fun (computer, port) ->
+        (fun (computer, port) -> 
           if (computer, port) <> (hostname, !init_port) then
             begin
               try
