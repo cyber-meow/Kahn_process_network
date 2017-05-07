@@ -7,13 +7,14 @@ open Kahn_network_error
 
 let debug str = ()
 
+(*
+  let mm = Mutex.create ()
 
-(*let mm = Mutex.create ()
-
-let debug str = 
-  Mutex.lock mm;
-  Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
-  Mutex.unlock mm*)
+  let debug str = 
+    Mutex.lock mm;
+    Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
+    Mutex.unlock mm
+*)
 
 
 module Prot = struct
@@ -158,7 +159,10 @@ module Net: S = struct
   module CSet = 
     Set.Make(struct type t = channel let compare = compare end)
   
-  type 'a process =  CSet.t -> 'a * CSet.t
+  type distributor = out_channel option
+
+  type 'a process = CSet.t -> distributor -> 'a * CSet.t 
+
   type 'a in_port = channel
   type 'a out_port = channel
 
@@ -172,7 +176,7 @@ module Net: S = struct
 
 
   let new_channel () = 
-    debug "new_channel"; 
+    debug "new_channel";
 
     let rec listen_incr () =
       try 
@@ -206,12 +210,12 @@ module Net: S = struct
     ch1, ch2
 
 
-  let put v c opened_ports = 
+  let put v c opened_ports _ =
     debug "put_something";
     begin 
     try
       let out_ch = match c.sock with
-        | None -> 
+        | None ->
             debug "put_something_none"; 
             let in_ch, out_ch = easy_connect c.host c.port_num in
             c.sock <- Some ((in_ch, out_ch), SEND);
@@ -235,7 +239,8 @@ module Net: S = struct
     end;
     () , CSet.add c opened_ports
 
-  let get (c:'a in_port) opened_ports =
+
+  let get (c:'a in_port) opened_ports _ =
     debug "get_from_channel";
     let res : 'a option ref = ref None in
     begin
@@ -276,7 +281,7 @@ module Net: S = struct
     | None -> ()
     | Some ((in_ch, out_ch), sock_kind) ->
         debug "try to close a port";
-        begin 
+        begin
           try
             match sock_kind with
             | SEND -> Marshal.to_channel out_ch PutEnd []
@@ -287,6 +292,7 @@ module Net: S = struct
         flush out_ch; close_out out_ch;
         port.sock <- None
   
+
   let rec send_one_process proc =
     if Queue.is_empty computer_queue then
       if !add_self = false then
@@ -322,10 +328,11 @@ module Net: S = struct
 
   (* penser à utiliser mutex pour cette fonction *)
   let send_processes = 
-    List.fold_left 
+    List.fold_left
       (fun in_lis proc -> (send_one_process proc, proc) :: in_lis) []
 
-  let doco l opened_ports =
+
+  let doco l opened_ports _ =
     debug "doco";
     CSet.iter close_port opened_ports;
     debug "finish_close_ports";
@@ -338,8 +345,8 @@ module Net: S = struct
       | [], [] -> ()
       | [], _ -> wait_finished (List.rev new_wait) []
       | ((comp, ch), proc)::ips, _ ->
-          (* On vérifie l'état de chaque processus tour à tour, chacun pour 
-             une seconde. *)
+          (* On vérifie l'état de chaque processus tour à tour, chacun pour
+           * une seconde. *)
           let rec select_rec () =
             try
               Unix.select [Unix.descr_of_in_channel ch] [] [] 1.
@@ -350,18 +357,27 @@ module Net: S = struct
           in
           let rd, _, _ = select_rec () in
           let inch_proc = match rd with
-          | [] -> [((comp, ch), proc)]
+          | [] -> [(comp, ch), proc]
           | _ ->
               begin
-                try 
-                  ignore (input_char ch);
-                  shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
-                  close_in ch;
-                  debug "one process finished"; []
-                with End_of_file ->
-                  print_error @@ Doco_peer_reset comp;
-                  shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
-                  close_in ch; send_processes [proc]
+                try
+                  match (Marshal.from_channel ch : int put_msg) with
+                  | Msg _ ->
+                      debug "feedback from children";
+                      [(comp, ch), proc]
+                  | PutEnd ->
+                      shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
+                      close_in ch;
+                      debug "one process finished"; []
+                with 
+                  | End_of_file ->
+                      print_error @@ Doco_peer_reset comp;
+                      shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
+                      close_in ch; send_processes [proc]
+                  | Failure f when f = "input_value: truncated object" ->
+                      print_error @@ Doco_peer_reset comp;
+                      shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
+                      close_in ch; send_processes [proc]
               end;
           in wait_finished ips @@ inch_proc@new_wait
     in
@@ -369,24 +385,38 @@ module Net: S = struct
     (), CSet.empty
 
     
-  let return v opened_ports =
+  let return v opened_ports _ =
     debug "return"; v, opened_ports
 
-  let bind p f opened_ports =  
-    debug "bind"; 
-    let exec, opened_ports' = p opened_ports in
-    f exec opened_ports'
+  let rec bind p f opened_ports distributor =
+    debug "bind";
+    let res, opened_ports' = p opened_ports distributor in
+    begin
+      match distributor with
+      | None -> ()
+      | Some out_ch ->
+          try
+            Marshal.to_channel out_ch (Msg 0) [Marshal.Closures];
+            flush out_ch
+          with Sys_error err_msg ->
+            print_error @@ Dist_shutdown err_msg;
+            Thread.exit ()
+    end;
+    f res opened_ports' distributor
 
 
   let run_proc_thread ((proc : unit process), out_ch) =
     debug "try to run a proc";
-    let (), opened_ports = proc CSet.empty in
+    let (), opened_ports =
+      proc CSet.empty (Some out_ch) in
     debug "this process end";
     debug @@ (string_of_int @@ CSet.cardinal opened_ports) ^ " port(s)";
     CSet.iter close_port opened_ports;
     debug "and close ports";
-    (* TODO: if the distributor is shut down *)
-    output_string out_ch "END";
+    (* Si on n'a pas réussi à envoyer PutEnd, il doit y avoir une errer
+     * quelque part mais on n'y peut rien faire, le processus termine de 
+     * toute façon *)
+    Marshal.to_channel out_ch PutEnd [];
     flush out_ch; close_out out_ch;
     Thread.exit ()
 
@@ -407,8 +437,9 @@ module Net: S = struct
             exit 0  (* on termine le programme, pas que le thread *)
         | Msg (proc : unit process) -> 
             debug "get process";
-            ignore (Thread.create (fun () -> 
-              Unix.handle_unix_error run_proc_thread (proc, out_ch)) ());
+            ignore (Thread.create (fun () ->
+              Unix.handle_unix_error 
+              run_proc_thread (proc, out_ch)) ());
             accept_proc ()
       with
         | End_of_file ->
@@ -491,12 +522,12 @@ module Net: S = struct
     else
       ignore (Thread.create (handle_unix_error listen_thread) ());
       debug "before exe";
-      let res, opened_ports = e CSet.empty in
+      let res, opened_ports = e CSet.empty None in
       CSet.iter close_port opened_ports;
       debug "program should terminate";
       debug @@ string_of_int @@ Queue.length computer_queue;
       Queue.iter
-        (fun (computer, port) -> 
+        (fun (computer, port) ->
           if (computer, port) <> (hostname, !init_port) then
             begin
               try

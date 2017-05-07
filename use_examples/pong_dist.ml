@@ -6,9 +6,9 @@
 (* Modified from the TP code of the ENS L3 system course                *)
 (*                                                                      *)
 (* The game must be played on exactly two computers.                    *)
-(* On the first computer the program is lauched with the option -wait   *)
+(* On the first computer the program is lauched with the option -wait.  *)
 (* On the second computer the program is then launched directly with    *)
-(* the parameters that are related to the game (see below)              *)
+(* the parameters that are related to the game (see below).             *)
 (*                                                                      *)
 (************************************************************************)
 

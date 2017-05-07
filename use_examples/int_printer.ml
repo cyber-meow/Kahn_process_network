@@ -8,7 +8,7 @@
 (*                                                                      *)
 (************************************************************************)
 
-module Example (K : Kahn.S) = struct
+module Int_printer (K : Kahn.S) = struct
 
   module K = K
   module Lib = Kahn.Lib(K)
@@ -32,5 +32,5 @@ module Example (K : Kahn.S) = struct
 
 end
 
-module E = Impls.Choose_impl(Example)
-let () = E.run ()
+module Int_pr = Impls.Choose_impl(Int_printer)
+let () = Int_pr.run ()
