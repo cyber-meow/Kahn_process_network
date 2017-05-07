@@ -7,14 +7,14 @@ open Kahn_network_error
 
 let debug str = ()
 
-
+(*
 let mm = Mutex.create ()
 
 let debug str = 
   Mutex.lock mm;
   Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
   Mutex.unlock mm
-
+*)
 
 module Prot = struct
 
@@ -396,20 +396,25 @@ module Net: S = struct
     debug "bind";
     let res, opened_ports' = 
       p opened_ports (Next (fun res -> bind (f res) k)) distributor in
-    let rest_proc : unit process = bind (f res) k in
+    let next_proc = f res in
+    (* This part of change (distributor, future) doesn't really make sense 
+     * because there is a problem of marshalling *)
     (*
-    begin
-      match distributor with
-      | None -> ()
-      | Some out_ch ->
-          try
-            Marshal.to_channel out_ch (Msg rest_proc) [Marshal.Closures];
-            flush out_ch
-          with Sys_error err_msg ->
-            print_error @@ Dist_shutdown err_msg;
-            Thread.exit ()
-    end;*)
-    f res opened_ports' (Next k) distributor
+      let rest_proc : unit process = bind next_proc k in
+      begin
+        match distributor with
+        | None -> ()
+        | Some out_ch ->
+            try
+              debug "give feedback";
+              Marshal.to_channel out_ch (Msg rest_proc) [Marshal.Closures];
+              flush out_ch
+            with Sys_error err_msg ->
+              print_error @@ Dist_shutdown err_msg;
+              Thread.exit ()
+      end;
+    *)
+    next_proc opened_ports' (Next k) distributor
 
 
   let run_proc_thread ((proc : unit process), out_ch) =
