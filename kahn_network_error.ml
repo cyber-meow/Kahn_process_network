@@ -17,6 +17,7 @@ type error_kind =
   | Proc_dist_no_connect of string * int * string
   | Wait_finish of string 
   | Doco_peer_reset of string
+  | Dist_shutdown of string
   | No_computer
   | Close_port_err of string
   | Terminate_program of string * int * string
@@ -107,6 +108,11 @@ let print_error_aux = function
       "the process."
       "Redestribution of the process ... (same computations may be repeated"
       "if the process is a source in the model)"
+
+  | Dist_shutdown err_msg ->
+      Format.eprintf "Error: @[%s@ (%s)@\n %s@]@."
+      "The distibutor of this process seems to be shutdown" err_msg
+      "Process exiting ..."
 
   | No_computer ->
       Format.eprintf "Error: @[%s@\n%s@]@."
