@@ -7,13 +7,14 @@ open Kahn_network_error
 
 let debug str = ()
 
+(*
+  let mm = Mutex.create ()
 
-let mm = Mutex.create ()
-
-let debug str = 
-  Mutex.lock mm;
-  Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
-  Mutex.unlock mm
+  let debug str = 
+    Mutex.lock mm;
+    Format.printf "%d: %s@." (Thread.id (Thread.self ())) str;
+    Mutex.unlock mm
+*)
 
 
 module Prot = struct
@@ -160,10 +161,7 @@ module Net: S = struct
   
   type distributor = out_channel option
 
-  type 'a process = CSet.t -> 'a future -> distributor -> 'a * CSet.t 
-  and 'a future = Next of ('a -> unit process)
-
-  let end_process = Next (fun _ _ _ _ -> (), CSet.empty)
+  type 'a process = CSet.t -> distributor -> 'a * CSet.t 
 
   type 'a in_port = channel
   type 'a out_port = channel
@@ -212,7 +210,7 @@ module Net: S = struct
     ch1, ch2
 
 
-  let put v c opened_ports _ _ =
+  let put v c opened_ports _ =
     debug "put_something";
     begin 
     try
@@ -242,7 +240,7 @@ module Net: S = struct
     () , CSet.add c opened_ports
 
 
-  let get (c:'a in_port) opened_ports _ _ =
+  let get (c:'a in_port) opened_ports _ =
     debug "get_from_channel";
     let res : 'a option ref = ref None in
     begin
@@ -334,7 +332,7 @@ module Net: S = struct
       (fun in_lis proc -> (send_one_process proc, proc) :: in_lis) []
 
 
-  let doco l opened_ports _ _ =
+  let doco l opened_ports _ =
     debug "doco";
     CSet.iter close_port opened_ports;
     debug "finish_close_ports";
@@ -363,10 +361,10 @@ module Net: S = struct
           | _ ->
               begin
                 try
-                  match (Marshal.from_channel ch : unit process put_msg) with
-                  | Msg proc' ->
-                      debug "process feedback from children";
-                      [(comp, ch), proc']
+                  match (Marshal.from_channel ch : int put_msg) with
+                  | Msg _ ->
+                      debug "feedback from children";
+                      [(comp, ch), proc]
                   | PutEnd ->
                       shutdown (descr_of_in_channel ch) SHUTDOWN_ALL;
                       close_in ch;
@@ -387,35 +385,30 @@ module Net: S = struct
     (), CSet.empty
 
     
-  let return v opened_ports _ _ =
+  let return v opened_ports _ =
     debug "return"; v, opened_ports
 
-  let rec bind : 
-    type a b. a process -> (a -> b process) -> b process =
-  fun p f opened_ports (Next k) distributor ->
+  let rec bind p f opened_ports distributor =
     debug "bind";
-    let res, opened_ports' = 
-      p opened_ports (Next (fun res -> bind (f res) k)) distributor in
-    let rest_proc : unit process = bind (f res) k in
-    (*
+    let res, opened_ports' = p opened_ports distributor in
     begin
       match distributor with
       | None -> ()
       | Some out_ch ->
           try
-            Marshal.to_channel out_ch (Msg rest_proc) [Marshal.Closures];
+            Marshal.to_channel out_ch (Msg 0) [Marshal.Closures];
             flush out_ch
           with Sys_error err_msg ->
             print_error @@ Dist_shutdown err_msg;
             Thread.exit ()
-    end;*)
-    f res opened_ports' (Next k) distributor
+    end;
+    f res opened_ports' distributor
 
 
   let run_proc_thread ((proc : unit process), out_ch) =
     debug "try to run a proc";
     let (), opened_ports =
-      proc CSet.empty end_process (Some out_ch) in
+      proc CSet.empty (Some out_ch) in
     debug "this process end";
     debug @@ (string_of_int @@ CSet.cardinal opened_ports) ^ " port(s)";
     CSet.iter close_port opened_ports;
@@ -529,7 +522,7 @@ module Net: S = struct
     else
       ignore (Thread.create (handle_unix_error listen_thread) ());
       debug "before exe";
-      let res, opened_ports = e CSet.empty end_process None in
+      let res, opened_ports = e CSet.empty None in
       CSet.iter close_port opened_ports;
       debug "program should terminate";
       debug @@ string_of_int @@ Queue.length computer_queue;

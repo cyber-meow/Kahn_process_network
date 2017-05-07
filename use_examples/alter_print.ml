@@ -1,4 +1,16 @@
 
+(**************************************************************************)
+(*                                                                        *)
+(* Another trivial example for the use of the KPN library                 *)
+(*                                                                        *)
+(* It's however in fact mainly used to illustrate a bug of the network    *)
+(* implementation. Two processes take turns reading and writing in a pair *)
+(* of channels, but if one process is stopped by accident, this process   *)
+(* is redistributed and needs to be run from the beginning. This can lead *)
+(* to blockage due to a bad order of put and get.                         *)
+(*                                                                        *)
+(**************************************************************************)
+
 module Alter_print (K : Kahn.S) = struct
 
   module K = K
