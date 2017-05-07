@@ -41,19 +41,19 @@ Otherwise, in the file __impls.ml__ there is `KPN_prog` which is suitable to exp
 
 ## Implementations
 The five different implementaions of the interface (seq, lwt, th, proc, network) are found in the root of the directory.
-### Sequential implementation: kahn_seq.ml
+### Sequential implementation (kahn_seq.ml)
 We try to simulate the parallelism in a single thread.  For more details please refer to ![A Poor Man's Concurrency Monad](http://www.seas.upenn.edu/~cis552/11fa/lectures/concurrency.html).  We're just rewriting the code of Haskell in OCaml in a framewrok that is appropriate for our KPN interface (so with `doco`).  In particular the continuation-passing style is adopted.
 
-### With the `Lwt` library: kahn_lwt.ml
+### With the `Lwt` library (kahn_lwt.ml)
 This is simply a translation from the OCaml cooperative threads library ![Lwt](http://ocsigen.org/lwt/) in our interface.  Since the library itself is much more complex, it serves mainly as a reference.  I sincerly recommend those who're interested in multi-thread programming in OCaml to take a look a this library (and anyway if you use ![Ocsigen](http://ocsigen.org/) you surely already know it).
 
-### The library `Thread`: kahn_th.ml
+### The library `Thread` (kahn_th.ml)
 Yet another possiblilty is to use the standard lightweight preemptive threads library ![Thread](https://caml.inria.fr/pub/docs/manual-ocaml/libref/Thread.html) of OCaml.  In fact this implementation is offered directly by the professor.  One should notice that real parallelism cannot be perfectly reached in OCaml at this moment due to the problem related to its _ramasse-miettes_.
 
-### Mutli-processe implementation : kahn_proc.ml
+### Mutli-processe implementation (kahn_proc.ml)
 Processes in the model are simulated directely by computer processes (i.e. `Unix.fork`) who communicates with each other using pipes.  This implementation may be considered particularly for multi-core computers.
 
-### Network
+### Network (kahn_network.ml & kahn_network_error.ml)
 This is the network version where communications between different computers are done via sockets.  This is the most sophisticated version and for a detailed explication please see our report (it's however in French).  In general, this implementation only works for OCaml >= 4.03.0 (tested with versions 4.03.0 and 4.04.0), but in some very basic cases, it may work for OCaml <= 4.02.0, which is the case for the two files __int_printer_network.ml__ and __sieve_Erastosthenes.ml__ in __use_examples/__.
 #### How to use
 There are three different command line options:
