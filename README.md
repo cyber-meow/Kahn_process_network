@@ -102,8 +102,10 @@ We implement the algorithm described on the page 9. of the article [Coroutines a
 
 Plot the Mandelbrot set for the range [-2, 2] &times; [-1.5, 1.5].  The image is divided into several zones and the computation of each zone is carried out by an individual process.  You can specify the size of the image, the number of zones, the number of iterations to run for each single point etc.   Run `make mandelbrot` to generate the program.
 
-<div style="text-align:center"><img src ="http://i.imgur.com/IBWSjrw.png" /></div>
-
+![Mandelbrot set](http://i.imgur.com/dJiADgf.jpg)
 
 ### Pong
 This is a pong game that is played on two computers.  Therefore it uses only the network version of the library.  On one computer the program is started with the option `-wait` and on the other computer you can specify the game parameters.  Run `make pong` to generate this program.
+
+### k-means
+The parallel k-means clustering algorithm.  The input file should contain on each line a point whose coodinates are separated by spaces.  The number of clusters k, the number of iterations i, and the number of workers p can be given as arguments.  The cluster centers are then computed and printed in an output file whose name can be specified by the option `-o`.  To generate this program, run `make kmeans`.
