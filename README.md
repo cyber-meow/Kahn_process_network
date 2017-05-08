@@ -2,6 +2,7 @@
 A library containing diffierent implementations of KPN in OCaml and example uses of this library.  Class project for the system and network course at ENS.
 
 ## Usage 
+
 ### Requirements
 - OCaml >= 4.03.0 (for the network implementaion, problem of marshalling)
 - The library `Lwt`
@@ -41,6 +42,7 @@ Otherwise, in the file __impls.ml__ there is `KPN_prog` which is suitable to exp
 
 ## Implementations
 The five different implementaions of the interface (seq, lwt, th, proc, network) are found in the root of the directory.
+
 ### Sequential implementation: kahn_seq.ml
 We try to simulate the parallelism in a single thread.  For more details please refer to [A Poor Man's Concurrency Monad](http://www.seas.upenn.edu/~cis552/11fa/lectures/concurrency.html).  We're just rewriting the code of Haskell in OCaml in a framewrok that is appropriate for our KPN interface (so with `doco`).  In particular the continuation-passing style is adopted.
 
@@ -55,6 +57,7 @@ Processes in the model are simulated directely by computer processes (i.e. `Unix
 
 ### Network: kahn_network.ml & kahn_network_error.ml
 This is the network version where communications between different computers are done via sockets.  This is the most sophisticated version and for a detailed explication please see our report (it's however in French).  In general, this implementation only works for OCaml >= 4.03.0 (tested with versions 4.03.0 and 4.04.0), but in some very basic cases, it may work for OCaml <= 4.02.0, which is the case for the two files __int_printer_network.ml__ and __sieve_Erastosthenes.ml__ in __use_examples/__.
+
 #### How to use
 There are three different command line options:
 - `-wait`
@@ -76,6 +79,33 @@ trolle
 trolle 12345
 tulipier
 ```
+Notice that when a peer is shut down during the execution, the whole program may or may not continue to work corretly since all the KPN processes that are stopped abnormally will simply be restarted from the beginning. 
 
 #### Related to the command line parsing
-I spent some time trying to find a way that allows us to do the command line parsing in different places of the OCaml code, but I was not able to find a perfect way to solve the problem.  So after the command line parsing of the network implementation (and the same for the functor `Choose_impl`), there may be empty strings as command line arguments.  The main program must ignore them .  One can also consider to include the specifications of differnt options listed above in their error message.
+I spent some time trying to find a way that allows us to do the command line parsing in different places of the OCaml code, but I was not able to find a perfect way to solve the problem.  So after the command line parsing of the network implementation (and the same for the functor `Choose_impl`), there may be empty strings as command line arguments.  The main program must ignore them .  One can also consider to include the specifications of different options listed above in their error message.
+
+## Examples
+In the directory __use_examples/__ you can find codes that are written using this library.  Please refer to individual file for a detailed explication of the command line options that are available for each program.
+
+### Basic examples
+- __put_get_test.ml__: One process puts a 2 in a channel and another process reads and prints it out.  Run `make put_get` to generate this program.
+- __int_printer.ml__: One process puts integers in a channel in an infinite loop while the other process reads from this channel and prints out these values.  Run `make int_printer` to generate the program.
+- __alter_print.ml__: Two processes alternately read and write in a pair of channels. Run `make alter_print` for this program.
+
+### Sieve of Eratosthenes
+We implement the algorithm described on the page 9. of the article [Coroutines and Networks of Parallel Processes.](https://hal.inria.fr/inria-00306565/PDF/rr_iria202.pdf) of Gilles Kahn and David Macqueen.  The number of KPN processes that are used in this algorithm is unbounded, thus it doesn't work very well with the network implementation.  Run `make prime_sieve` to generate the program.
+
+### Mandelbrot set
+> The Mandelbrot set is the set of complex numbers c for which the function f<sub>c</sub>(z)=z<sup>2</sup>+c does not diverge when iterated from z=0, i.e., for which the sequence f<sub>c</sub>(0), f<sub>c</sub>(f<sub>c</sub>(0)), etc., remains bounded in absolute value.
+> 
+> _-Wikipedia_
+
+Plot the Mandelbrot set for the range [-2, 2] &times; [-1.5, 1.5].  The image is divided into several zones and the computation of each zone is carried out by an individual process.  You can specify the size of the image, the number of zones, the number of iterations to run for each single point etc.   Run `make mandelbrot` to generate the program.
+
+![Mandelbrot set](http://i.imgur.com/dJiADgf.jpg)
+
+### Pong
+This is a pong game that is played on two computers.  Therefore it uses only the network version of the library.  On one computer the program is started with the option `-wait` and on the other computer you can specify the game parameters.  Run `make pong` to generate this program.
+
+### k-means
+The parallel k-means clustering algorithm.  The input file should contain on each line a point whose coodinates are separated by spaces.  The number of clusters k, the number of iterations i, and the number of workers p can be given as arguments.  The cluster centers are then computed and printed in an output file whose name can be specified by the option `-o`.  To generate this program, run `make kmeans`.
