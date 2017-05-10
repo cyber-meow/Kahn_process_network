@@ -1,7 +1,7 @@
-﻿#Projet Réseaux de Kahn
+﻿# Projet Réseaux de Kahn
 Yu-Guan Hsieh & Téo Sanchez
 
-##Résumé du projet
+## Résumé du projet
 
 Le but de ce projet est de réaliser différentes implémentations de
 réseaux de Kahn à partir d'une interface donnée sous forme monadique
@@ -29,23 +29,23 @@ Les différentes implémentations sont :
 5. Une implémentation distribuée sur le réseaux utilisant des sockets de 
   la bibliothèque Unix d'OCaml
 
-##Les différentes implémentations
+## Les différentes implémentations
 
-###Threads d'OCaml (fournie) : `kahn_th.ml`
+### Threads d'OCaml (fournie) : `kahn_th.ml`
 
 Dans cette implémentation, les processus sont représentés par des
 fonctions de type  `unit -> 'a`. C'est une promesse qui nous rendra une valeur
 de type `'a` une fois que la fonction `run` est exécutée. Chaque processus
 individuel vit dans son propre thread.
 
-###Threads de Lwt : `kahn_lwt.ml`
+### Threads de Lwt : `kahn_lwt.ml`
 
 Ici, les processus sont des threads de type `'a Lwt.t`, et la plupart des 
 fonctions requises sont déjà implémentés dans le module Lwt : return, bind, 
 doco (`Lwt.join`), run, get (`Lwt_stream.next`). L'implémentation est
 triviale.
 
-###Processus lourd du module Unix d'OCaml : `kahn_proc.ml`
+### Processus lourd du module Unix d'OCaml : `kahn_proc.ml`
 
 De manière analogue aux threads d'OCaml, les processus sont une fonction
 `unit -> 'a`. On utilise des pipes pour les canaux, couplés avec des
@@ -66,7 +66,7 @@ processus de la liste doivent finir avant de passer à la prochaine étape.
 La fonction renvoie `unit` une fois que tous les processus de la liste ont 
 été exécutées.
 
-###Implémentation séquentielle, parallélisme simulé : `kahn_seq.ml`
+### Implémentation séquentielle, parallélisme simulé : `kahn_seq.ml`
 
 On distingue le "vrai" parallélisme (où un ordinateurs multi-cœurs
 lance des processus sur plusieurs de ses processeurs) du parallélisme 
@@ -89,10 +89,12 @@ Ainsi, les processus sont divisés en tranches appelés actions, et ces
 mêmes actions renvoient leur futur qui sont elles mêmes des
 actions :
 
-	type action =
-	  | Stop	(* Fin du processus*)
-	  | Action of (unit -> action)
-	  | Doco of action list
+```
+type action =
+  | Stop	(* Fin du processus*)
+  | Action of (unit -> action)
+  | Doco of action list
+```
 
 Un processus est alors de type `('a -> action) -> action`.
 
@@ -104,9 +106,9 @@ alors d'avoir une structure de donnée globale qui stocke ce qu'il reste
 Nous avons choisi ici la première implémentation issue de l'article "A
 poor Man's Concurrency Monad".
 
-###Implémentation distribuée sur le réseau : `kahn_network.ml`
+### Implémentation distribuée sur le réseau : `kahn_network.ml`
 
-####Déscription  
+#### Déscription  
 
 Cette implémentation a pour objectif de distribuer les processus sur
 plusieurs ordinateurs et communiquant à travers le réseaux via des
@@ -160,7 +162,7 @@ des producteurs et des consommateurs respectivement, en appelant un nouveau
 client quand la connection est rompue ou lorsque le processus lui renvoie 
 le signal `PutEnd` ou `GetEnd` signifiant la fin de la communication.
 
-####Utilisation
+#### Utilisation
 
 Cette implémentation ne fonctionne qu'avec OCaml >= 4.03.0 de façon génerale
 (dans des cas particuliers, comme le fichier `int_printer_network.ml`, ça
@@ -178,14 +180,14 @@ Il y a plusieurs options dans la ligne de commande ,
 Le fichier _network.config_ se présente sous le format suivant :
 
 ```
-    Computer1 [port1]
-    Computer2 [port2]
-    ...
+Computer1 [port1]
+Computer2 [port2]
+...
 ```
 
 Le même ordinateur peut apparaître plusieurs fois si les ports sont différents.
 
-####Améliorations possibles
+#### Améliorations possibles
 
 Lorsque la communication avec un ordinateur est interrompue de manière 
 inopinée, le programme peut ne plus continuer correctement puisque le 
@@ -202,18 +204,31 @@ son futur pour chaque `bind` exécutée. Il y a des modifications à faire, et
 surtout le type d'un processus ne resterait plus le même mais ça n'a pas
 abouti à cause du module `Marshal` qui ne prend pas en charge le type abstrait.
 
-En OCaml avec le module `Arg` le parsing de la ligne de commande peut
-s'effectuer en un seul endroit, ce qui nous pose de problème car on a besoin
-que ça soit fait plusieurs fois (une fois pour le foncteur `Choose_impl`,
-une fois pour la fonction `run` dans l'implémentation de réseau et enfin
-une fois dans le programme utilisateur). Pour résoudre le problème, on a
-utilisé la fonction `Arg.parse_argv` au lieu de `Arg.parse` et on modifie
-directement la valeur de `Sys.argv`. Il y a quelques défaults de cette
-solution: 1. 
- 
-##Exemples d'applications
+En OCaml avec le module `Arg` le parsing de la ligne de commande ne peut
+s'effectuer que dans un seul endroit, ce qui nous pose de problème car on a 
+besoin que ça soit fait plusieurs fois (une fois pour le foncteur 
+`Choose_impl`, une fois pour la fonction `run` dans l'implémentation de 
+réseau et enfin une fois dans le programme utilisateur). Pour contourner cette
+difficulté, on a choisi d'utiliser la fonction `Arg.parse_argv` au lieu de 
+`Arg.parse` et on modifie directement la valeur de `Sys.argv`. 
+Il y a quelques défauts de cette solution: 
 
-###Exemples basiques 
+1. Le tableau `Sys.argv` peut contenir des chaînes de caractères vides après
+   le parsing. L'utilisateur de la bibliothèque doit les négliger.
+
+2. Il nous manque un message complèt indiquant tous ces spécifications
+   qui peut s'afficher quelque parts quand il y en a besoin (par exemple
+   avec la commande `--help`).
+
+__Anecdote:__ En OCaml 4.03.0 et 4.04.0, dans le module `Arg` avec la fonction
+`Arg.parse`, pour une option de ligne de commande qui prend un seul argument 
+(c'est ainsi le cas pour `-port` dans notre programme), 
+le message d'erreur peut s'afficher
+trois fois si aucun argument est donné à cette option.
+
+## Exemples d'applications
+
+### Exemples basiques 
 
 * `put_get_test.ml` : un processus met l'entier 2 dans un canal et l'autre le 
   lit et l'affiche. Faire `make put_get` pour générer ce programme
@@ -222,7 +237,7 @@ solution: 1.
 * `alter_print.ml` : Deux processus écrivent et lisent alternativement une 
   suite d'entier dans deux canaux.
 
-###Crible d’Ératosthène
+### Crible d’Ératosthène
 
 Il s'agit d'un procédé permettant de trouver tous les nombres premiers 
 inférieurs à un certain entier naturel donné. Le fichier `sieve_Erathostene.ml`
@@ -232,7 +247,7 @@ MacQueen. Le nombre de processus utilisés dans cet algorithme n'est pas
 borné et donc ne fonctionne pas bien avec l'implémentation distribuée 
 par le réseau.
 
-###Tracé de l'ensemble de Mandelbrot
+### Tracé de l'ensemble de Mandelbrot
 
 L'ensemble de Mandelbrot est une fractale définie comme l'ensemble des 
 points c du plan complexe pour lesquels la suite des nombres complexes
@@ -248,13 +263,13 @@ L'image est divisée en plusieurs zones et le calcul de chaque zone est pris
 en charge par un processus. On peut spécifier la taille de l'image, 
 le nombre de zones et le nombre d'itérations pour chaque point. 
 
-###Pong
+### Pong
 
 L'implémentation de pong n'utilise que la version réseau des KPN, un 
 ordinateur lance le programme avec l'option `-wait` tandis que l'autre peut 
 choisir les paramètres de jeu.
 
-###K-moyennes
+### K-moyennes
 
 Il s'agit d'un algorithme de partitionnement des données d'un problème 
 d'optimisation combinatoire. Le fichier d'entrée contient sur chaque ligne 
@@ -264,9 +279,8 @@ p (de processus en parallèle) peuvent être données en arguments. Les
 centres des partitions sont ensuite calculées et écrits dans un fichier 
 de sortie spécifié par l'option `-o`.
 
-##Conclusion et perspectives
+## Conclusion et perspectives
 
 map reduce
 picture n picture
 
-##Bibliographie
