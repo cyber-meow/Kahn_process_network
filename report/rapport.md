@@ -26,7 +26,7 @@ Les différentes implémentations sont :
 4. Une implémentation séquentielle où le parallélisme est simulé (inspiré de 
   l'implémentation par continuation de l'article 
   _A Poor Man's Concurrency Monad_).
-5. Une implémentation distribuée sur le réseaux utilisant des sockets de 
+5. Une implémentation distribuée sur le réseau utilisant des sockets de 
   la bibliothèque Unix d'OCaml
 
 ## Les différentes implémentations
@@ -75,7 +75,7 @@ Dans ce dernier cas, le parallélisme est simulé.
 Cette idée est incarnée par deux implémentations possibles :
 
 La première consiste à traduire directement le code Haskell issu de
-l'article "_A Poor Man's Concurrency Monad_" en OCaml à quelques nuances
+l'article _A Poor Man's Concurrency Monad_ en OCaml à quelques nuances
 près, même si la structure reste la même. Elle utilise la méthode
 d'_entrelacement_ (_interleaving_ en anglais) c'est à dire que le
 processeur va exécuter le début d'un thread, avant de le suspendre pour
@@ -111,7 +111,7 @@ poor Man's Concurrency Monad".
 #### Déscription  
 
 Cette implémentation a pour objectif de distribuer les processus sur
-plusieurs ordinateurs et communiquant à travers le réseaux via des
+plusieurs ordinateurs et communiquant à travers le réseau via des
 sockets.
 On utilise les sockets implémentés dans le module Unix d'OCaml et les
 données sont transféréss avec le module `Marshal`.
@@ -133,7 +133,7 @@ On distingue:
   du fichier _network.config_ où l'on doit écrire la liste des
   ordinateurs que l'on souhaite utiliser.
 
-La fonction `new_channel` créée deux threads. L'un communique avec les
+La fonction `new_channel` crée deux threads. L'un communique avec les
 producteurs et l'autre avec les consommateurs au travers de sockets. 
 Les deux threads communiquent également entre eux par un pipe :
 Le premier thread lit les données dans les sockets entre lui et les
@@ -150,12 +150,19 @@ l'utilisation de la fonction `Unix.select`, on surveille que les processus
 fils s'exécutent, et dans le cas contraire, il faut redistribuer
 le processus.
 
+On précise aussi que sur chaque ordinatuer (ou encore mieux, sur
+chaque noeud de réseau car un programme peut être lancé plusieurs fois
+sur une même machine) il y a un thread qui se charge d'accepter les 
+distributions de processus et de créer des nouveau threads
+dans lesquels ces processus seront exécutés. Le choix d'utiliser des
+processus légers autorise ainsi l'existence des variables partagées au sein
+d'un même exemplaire(?) de programme.
+
 La fonction put prend un élément `v` à envoyer, et l'ensemble des canaux
-ouverts, et vérifie s'il existe un canal concret dans la socket 
+ouverts, et vérifie s'il existe un canal concret dans la socket
 (elle le crée sinon). Elle utilise `Marshal` pour envoyer la valeur dans 
 le canal et renvoie `unit` et le nouvel ensemble des canaux ouverts.
 La fonction `get` procède de manière analogue sauf qu'elle renvoie une valeur.
-
 
 Les fonctions `commu_with_send` et `commu_with_recv` gèrent le remplacement 
 des producteurs et des consommateurs respectivement, en appelant un nouveau 
@@ -170,7 +177,7 @@ pourrait marcher avec OCaml 4.02.0).
 
 Il y a plusieurs options dans la ligne de commande ,
 
-* `-wait` : doit être utilisé sur tous les ordinateurs du réseaux à 
+* `-wait` : doit être utilisé sur tous les ordinateurs du réseau à 
   l'exception de l'ordinateur principal qui devra être lancé à la fin pour 
   démarre le programme.
 * `-port` : spécifie le port à écouter (1024 par défaut)
@@ -201,15 +208,28 @@ entiers depuis le début.
 
 Pour règler ce problème, on a essayé de demander le processus fils de renvoyer
 son futur pour chaque `bind` exécutée. Il y a des modifications à faire, et
-surtout le type d'un processus ne resterait plus le même mais ça n'a pas
-abouti à cause du module `Marshal` qui ne prend pas en charge le type abstrait.
+surtout le type d'un processus ne resterait plus le même, mais ça n'a pas
+abouti à cause du module `Marshal` qui ne prend pas en charge le type 
+abstrait (même si on n'a pas pu identifier d'où vient ce type abstrait en jeu 
+empêchant notre code de fonctionner).
+
+Afin que les communications à travers des canaux soient plus robustes,
+des questions sont à poser. Comment vérifier que le message envoyé a
+été bien reçu (et par la bonne personne)? Comment affirmer que les message
+reçus viennent effectivment du programme en question (et que les messages sont
+corrects)? Les idées comme des clés d'authentification peuvent être
+considérées.
+
+Il y a encore un autre petit soucis dans notre réalisation de la version
+réseau: l'incompatibilité entre la fonction `Unix.select` et le module
+`Graphics` d'OCaml. Un bloc `try ... with ...` a été adopté face à cette gêne. 
 
 En OCaml avec le module `Arg` le parsing de la ligne de commande ne peut
-s'effectuer que dans un seul endroit, ce qui nous pose de problème car on a 
+s'effectuer que dans un seul endroit, ce qui nous pose de difficulté car on a 
 besoin que ça soit fait plusieurs fois (une fois pour le foncteur 
 `Choose_impl`, une fois pour la fonction `run` dans l'implémentation de 
-réseau et enfin une fois dans le programme utilisateur). Pour contourner cette
-difficulté, on a choisi d'utiliser la fonction `Arg.parse_argv` au lieu de 
+réseau et enfin une fois dans le programme utilisateur). Pour contourner ce
+problème, on a choisi d'utiliser la fonction `Arg.parse_argv` au lieu de 
 `Arg.parse` et on modifie directement la valeur de `Sys.argv`. 
 Il y a quelques défauts de cette solution: 
 
@@ -222,7 +242,7 @@ Il y a quelques défauts de cette solution:
 
 __Anecdote:__ En OCaml 4.03.0 et 4.04.0, dans le module `Arg` avec la fonction
 `Arg.parse`, pour une option de ligne de commande qui prend un seul argument 
-(c'est ainsi le cas pour `-port` dans notre programme), 
+(c'est ainsi le cas pour `-port` dans notre programme),
 le message d'erreur peut s'afficher
 trois fois si aucun argument est donné à cette option.
 
@@ -274,13 +294,43 @@ choisir les paramètres de jeu.
 Il s'agit d'un algorithme de partitionnement des données d'un problème 
 d'optimisation combinatoire. Le fichier d'entrée contient sur chaque ligne 
 un point dont les coordonnées sont séparées par des espaces. 
-Le nombre de partition k, le nombre d'itérations i, et le nombre d'ouvriers 
-p (de processus en parallèle) peuvent être données en arguments. Les 
-centres des partitions sont ensuite calculées et écrits dans un fichier 
-de sortie spécifié par l'option `-o`.
+Le nombre de partitions `k`, le nombre d'itérations `i`, le nombre d'ouvriers 
+`p` (de processus en parallèle), et le nombre de fois à exécuter l'algorithme
+`t` peuvent être données en arguments. Les centres des partitions sont 
+ensuite calculées et écrits dans un fichier de sortie spécifié par l'option 
+`-o`. En plus, si les entrées sont des points de dimension 2, on peut 
+afficher le résultat en utilisant l'option `-plot`.
 
-## Conclusion et perspectives
+## Divers: MapReduce
 
-map reduce
-picture n picture
+On a voulu implémenter le modèle de MapReduce dans le cadre de réseau de Kahn,
+mais c'est enfin abandonné dû à deux raisons principales:
+
+1. __MapReduce est indéterministe, alors que KPN est déterministe__   
+   Le modèle MR est indéterministe dans le sens qu'il n'y a pas un ordre
+   prédéfini des exécutions de tâches. Les résultats des ouvriers sont traités
+   _immédiatement_ par le patron dès qu'ils sont produits, ce qui est 
+   impossible dans un réseau de Kahn car on n'a pas de droit de tester si un 
+   canal est vide ou pas: une fois qu'on est bloqué, on est bloqué. Par 
+   conséquent, en modèlisant MapReduce par KPN, tout devient déterministe, 
+   ce qui montre une différence intrinsèque entre ces deux modèles.
+ 
+2. __Le rôle de patron__  
+   Observons que dans le module `Functory`, le patron existe particulièrement
+   pour effectuer un effet de bord, ce qui est gênant car quand on fait un
+   `doco` dans les réseaux de Kahn, on aimerait bien que tous les processus 
+   soient purs (à éventuellement les opérations I/O près). Le fait que le 
+   patron peut effectuer un effet de bord impose qu'il vit dans le même
+   ordinateur et le même processus Unix que le process qui a effectué la 
+   `doco`, ce que l'on n'a à priori pas de droit de controler au niveau d'un 
+   modèle abstrait tel que celui de réseau de Kahn.
+
+### Une petite mise en garde
+
+Les deux points ci-dessus ne nous empêchent pas d'implémenter une interface
+MapReduce en utilisant notre bibliothèque de réseau de Kahn. Pourtant,
+ils nous font remarquer des nuances éventuelles entre le vrai MapReduce et un
+MapReduce qui est simulé par KPN.
+
+
 
