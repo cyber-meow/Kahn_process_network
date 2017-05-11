@@ -89,9 +89,9 @@ Ainsi, les processus sont divisés en tranches appelés actions, et ces
 mêmes actions renvoient leur futur qui sont elles mêmes des
 actions :
 
-```
+```OCaml
 type action =
-  | Stop	(* Fin du processus*)
+  | Stop
   | Action of (unit -> action)
   | Doco of action list
 ```
@@ -108,7 +108,7 @@ poor Man's Concurrency Monad".
 
 ### Implémentation distribuée sur le réseau : `kahn_network.ml`
 
-#### Déscription  
+#### Déscription
 
 Cette implémentation a pour objectif de distribuer les processus sur
 plusieurs ordinateurs et communiquant à travers le réseau via des
@@ -194,7 +194,7 @@ Computer2 [port2]
 
 Le même ordinateur peut apparaître plusieurs fois si les ports sont différents.
 
-#### Améliorations possibles
+#### D'autres problèmes techniques
 
 Lorsque la communication avec un ordinateur est interrompue de manière 
 inopinée, le programme peut ne plus continuer correctement puisque le 
@@ -222,29 +222,7 @@ considérées.
 
 Il y a encore un autre petit soucis dans notre réalisation de la version
 réseau: l'incompatibilité entre la fonction `Unix.select` et le module
-`Graphics` d'OCaml. Un bloc `try ... with ...` a été adopté face à cette gêne. 
-
-En OCaml avec le module `Arg` le parsing de la ligne de commande ne peut
-s'effectuer que dans un seul endroit, ce qui nous pose de difficulté car on a 
-besoin que ça soit fait plusieurs fois (une fois pour le foncteur 
-`Choose_impl`, une fois pour la fonction `run` dans l'implémentation de 
-réseau et enfin une fois dans le programme utilisateur). Pour contourner ce
-problème, on a choisi d'utiliser la fonction `Arg.parse_argv` au lieu de 
-`Arg.parse` et on modifie directement la valeur de `Sys.argv`. 
-Il y a quelques défauts de cette solution: 
-
-1. Le tableau `Sys.argv` peut contenir des chaînes de caractères vides après
-   le parsing. L'utilisateur de la bibliothèque doit les négliger.
-
-2. Il nous manque un message complèt indiquant tous ces spécifications
-   qui peut s'afficher quelque parts quand il y en a besoin (par exemple
-   avec la commande `--help`).
-
-__Anecdote:__ En OCaml 4.03.0 et 4.04.0, dans le module `Arg` avec la fonction
-`Arg.parse`, pour une option de ligne de commande qui prend un seul argument 
-(c'est ainsi le cas pour `-port` dans notre programme),
-le message d'erreur peut s'afficher
-trois fois si aucun argument est donné à cette option.
+`Graphics` d'OCaml. Un bloc `try... with...` a été adopté face à cette gêne. 
 
 ## Exemples d'applications
 
@@ -273,8 +251,8 @@ L'ensemble de Mandelbrot est une fractale définie comme l'ensemble des
 points c du plan complexe pour lesquels la suite des nombres complexes
 définie par récurrence par 
 
-z0 = 0
-zn+1 = zn^2 +c
+z<sub>0</sub> = 0  
+z<sub>n+1</sub> = z<sub>n</sub>² + c
 
 est bornée.
 
@@ -301,7 +279,33 @@ ensuite calculées et écrits dans un fichier de sortie spécifié par l'option
 `-o`. En plus, si les entrées sont des points de dimension 2, on peut 
 afficher le résultat en utilisant l'option `-plot`.
 
-## Divers: MapReduce
+## Divers
+
+### Parsing de la ligne de commande
+
+En OCaml avec le module `Arg` le parsing de la ligne de commande ne peut
+s'effectuer que dans un seul endroit, ce qui nous pose de difficulté car on a 
+besoin que ça soit fait plusieurs fois (une fois pour le foncteur 
+`Choose_impl`, une fois pour la fonction `run` dans l'implémentation de 
+réseau et enfin une fois dans le programme utilisateur). Pour contourner ce
+problème, on a choisi d'utiliser la fonction `Arg.parse_argv` au lieu de 
+`Arg.parse` et on modifie directement la valeur de `Sys.argv`. 
+Il y a quelques défauts de cette solution: 
+
+1. Le tableau `Sys.argv` peut contenir des chaînes de caractères vides après
+   le parsing. L'utilisateur de la bibliothèque doit les négliger.
+
+2. Il nous manque un message complèt indiquant tous ces spécifications
+   qui peut s'afficher quelque parts quand il y en a besoin (par exemple
+   avec la commande `--help`).
+
+__Anecdote:__ En OCaml 4.03.0 et 4.04.0, dans le module `Arg` avec la fonction
+`Arg.parse`, pour une option de ligne de commande qui prend un seul argument 
+(c'est ainsi le cas pour `-port` dans notre programme),
+le message d'erreur peut s'afficher
+trois fois si aucun argument est donné à cette option.
+
+### MapReduce
 
 On a voulu implémenter le modèle de MapReduce dans le cadre de réseau de Kahn,
 mais c'est enfin abandonné dû à deux raisons principales:
@@ -324,8 +328,6 @@ mais c'est enfin abandonné dû à deux raisons principales:
    ordinateur et le même processus Unix que le process qui a effectué la 
    `doco`, ce que l'on n'a à priori pas de droit de controler au niveau d'un 
    modèle abstrait tel que celui de réseau de Kahn.
-
-### Une petite mise en garde
 
 Les deux points ci-dessus ne nous empêchent pas d'implémenter une interface
 MapReduce en utilisant notre bibliothèque de réseau de Kahn. Pourtant,
