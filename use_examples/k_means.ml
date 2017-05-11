@@ -198,7 +198,7 @@ module K_means (K : Kahn.S) = struct
 
   (* The parallel k-means algorithm, side effect on the array points *)
 
-  let k_means_once iter points k num_workers qo_final =
+  let k_means_once ?(iter=500) points k num_workers qo_final =
     random_permu points;
     let point_partitions = divide_points points num_workers in
     let init_centers = init_centers points k in
@@ -218,7 +218,7 @@ module K_means (K : Kahn.S) = struct
 
   (* Exécuter l'algorithme plusieurs fois et garder le meilleur résultat *)
 
-  let k_means iter times dim points k num_workers qo_final =
+  let k_means ?(iter=500) ?(times=5) dim points k num_workers qo_final =
     let n = Array.length points in
     if n < k then
         invalid_arg "k_means: Cannot have more clusters than data points";
@@ -230,7 +230,7 @@ module K_means (K : Kahn.S) = struct
     done;
     let kmeans_chs = create_channels times in
     let k_means_runs = List.map
-      (k_means_once iter points k num_workers) (List.map snd kmeans_chs) 
+      (k_means_once ~iter points k num_workers) (List.map snd kmeans_chs) 
     in
     K.doco k_means_runs >>=
     fun () -> get_chs [] (List.map fst kmeans_chs) >>=
@@ -238,6 +238,7 @@ module K_means (K : Kahn.S) = struct
       let min_dis2, centers =
         List.fold_left min (List.hd centers_dis2) centers_dis2
       in
+      (*
       let print_centers fmt =
         Array.iter (fun c -> Format.fprintf fmt "%s@." @@ string_of_vector c)
       in
@@ -245,6 +246,7 @@ module K_means (K : Kahn.S) = struct
         (fun (dis, centers) -> 
           Format.printf "%f,@\n %a" dis print_centers centers) centers_dis2;
       Format.printf "%f@." min_dis2;
+      *)
       K.put centers qo_final
 
 end
@@ -257,7 +259,7 @@ module K_means_exe (K : Kahn.S) = struct
 
   let d = ref None
   let k = ref 8
-  let iter = ref 300
+  let iter = ref 500
   let times = ref 5
   let num_workers = ref 10
 
@@ -276,21 +278,21 @@ module K_means_exe (K : Kahn.S) = struct
     [ "-k", Arg.Set_int k,
       " number of clusters k in the algorithm (default 8)";
       "-d", Arg.Int (fun i -> d := Some i),
-      " dimension of data examples (must be consistent with the data";
+      " dimension of data examples (must be consistent with the data)";
       "-p", Arg.Set_int num_workers,
       " number of parallel processes used in the computation (default 10)";
       "-i", Arg.Set_int iter,
-      " number of iterations in a single run (default 300)";
+      " number of iterations in a single run (default 500)";
       "-t", Arg.Set_int times,
       " number of times to k-means algorithm will be run (default 5)";
       "-o", Arg.Set_string output_file,
       " name of the output file (containing cluster centers)";
-      "-plot", Arg.Set plot,
-      " plot the result (only when input vectors are of dimension 2)";
       "-w", Arg.Set_int width,
       " the width of the display zone (only when -plot is specified)";
       "-h", Arg.Set_int height,
-      " the height of the display zone (only when -plot is specified)"]
+      " the height of the display zone (only when -plot is specified)";
+      "-plot", Arg.Set plot,
+      " plot the result (only when input vectors are of dimension 2)"; ]
 
   let parse_cmd () =
     Arg.parse (Arg.align options)
@@ -309,12 +311,15 @@ module K_means_exe (K : Kahn.S) = struct
           Sys.argv.(0) "data file name missing"; exit 1
       | Some data_file -> data_file
     in
-    let args = [!k, "k"; !num_workers, "p"; !iter, "i"] in
+    let args = 
+      [ !k, "k"; !num_workers, "p"; !iter, "i" ; 
+        !times, "t"; !width, "w"; !height, "h" ] in
     try
       let invalid_arg = List.find (fun (value, _) -> value <= 0) args in
       Format.eprintf 
         "%s: %s can only take positive value@."
         Sys.argv.(0) @@ snd invalid_arg; 
+      Arg.usage options usage;
       exit 1
     with Not_found -> data_file
 
@@ -423,7 +428,8 @@ module K_means_exe (K : Kahn.S) = struct
       K.return @@ K.new_channel () >>=
     fun (q_in, q_out) -> 
       try
-        K_means.k_means !iter !times d points !k !num_workers q_out >>=
+        K_means.k_means 
+          ~iter:!iter ~times:!times d points !k !num_workers q_out >>=
         fun () -> K.get q_in >>=
         fun centers -> 
           let out_ch = open_out !output_file in
