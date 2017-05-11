@@ -46,12 +46,27 @@ module K_means (K : Kahn.S) = struct
 
   open Vector
 
+  (* les messages envoyés par les ouvriers *)
+
+  type worker_data = 
+    | Num_sum of (int * vector) array
+    | Dis2 of float
+
+  let read_num_sum = function
+    | Num_sum num_sum -> num_sum
+    | Dis2 _ -> assert false
+
+  let read_dis2 = function
+    | Dis2 dis2_sum -> dis2_sum
+    | Num_sum _ -> assert false
+
   (* Calculer pour chaque point le cluster qu'il appartient *)
 
   let cal_dist points centers =
     let d = Array.length points.(0) in
     let k = Array.length centers in
     let num_sum = Array.make k (0, vector_zero d) in
+    let dis2_sum = ref 0. in
     for i = 0 to Array.length points - 1 do
       let point = points.(i) in
       let min_dis2 = ref @@ dis_square point centers.(0) in
@@ -65,20 +80,25 @@ module K_means (K : Kahn.S) = struct
           end;
       done;
       let num, sum = num_sum.(!min_ind) in
-      num_sum.(!min_ind) <- num + 1, sum ++ point
+      num_sum.(!min_ind) <- num + 1, sum ++ point;
+      dis2_sum := !dis2_sum +. !min_dis2
     done;
-    num_sum
+    num_sum, !dis2_sum
 
   (* Chaque ouvrier fait les calculs pour une partie de points *) 
 
   let worker iter points qin qout =
     let rec step i =
-      if i = iter then K.return ()
+      if i = iter then 
+        K.get qin >>= 
+        fun centers ->
+          let dis2_sum = snd @@ cal_dist points centers in
+          K.put (Dis2 dis2_sum) qout
       else
         K.get qin >>=
         fun centers ->
-          let num_sum = cal_dist points centers in
-          K.put num_sum qout >>=
+          let num_sum = fst @@ cal_dist points centers in
+          K.put (Num_sum num_sum) qout >>=
         fun () -> step (i+1)
     in
     step 0
@@ -112,17 +132,25 @@ module K_means (K : Kahn.S) = struct
     let d = Array.length init_centers.(0) in
     let k = Array.length init_centers in
     let rec step centers i =
-      if i = iter then K.put centers qo_final
+      if i = iter then
+        put_one_chs centers qouts >>=
+        fun () -> get_chs [] qins >>=
+        fun dis2s -> 
+          let dis2_sum' = List.fold_left (+.) 0. (List.map read_dis2 dis2s) in
+          K.put (dis2_sum', centers) qo_final
       else
         put_one_chs centers qouts >>=
         fun () -> get_chs [] qins >>=
         fun num_sums ->
           let num_sum' =
             List.fold_left 
-              (Array.map2 (fun (n1,s1) (n2,s2) -> n1+n2, s1++s2))
+              (fun num_sum' num_sum -> 
+                let num_sum = read_num_sum num_sum in
+                Array.map2
+                (fun (n1,s1) (n2,s2) -> n1+n2, s1++s2) num_sum' num_sum)
               (Array.make k (0, vector_zero d)) num_sums
           in
-          let centers' = 
+          let centers' =
             Array.map 
               (fun (n, vect) -> 
                 let fn = float_of_int n in 
@@ -170,16 +198,7 @@ module K_means (K : Kahn.S) = struct
 
   (* The parallel k-means algorithm, side effect on the array points *)
 
-  let k_means iter points dim k num_workers qo_final =
-    let n = Array.length points in
-    if n < k then
-        invalid_arg "k_means: Cannot have more clusters than data points";
-    if n < num_workers then
-        invalid_arg "k_means: Must have fewer workers than data points";
-    for i = 0 to n-1 do
-      if Array.length points.(i) <> dim then
-        invalid_arg "k_means: Dimension of data point is not as specified"
-    done;
+  let k_means_once iter points k num_workers qo_final =
     random_permu points;
     let point_partitions = divide_points points num_workers in
     let init_centers = init_centers points k in
@@ -191,11 +210,42 @@ module K_means (K : Kahn.S) = struct
     in
     let workers = 
       List.map2 
-        (fun pset (qin, qout) -> worker iter pset qin qout) 
+        (fun pset (qin, qout) -> worker iter pset qin qout)
         point_partitions @@
         List.combine (List.map fst point_chs) (List.map snd num_sum_chs)
     in
     K.doco @@ master::workers
+
+  (* Exécuter l'algorithme plusieurs fois et garder le meilleur résultat *)
+
+  let k_means iter times dim points k num_workers qo_final =
+    let n = Array.length points in
+    if n < k then
+        invalid_arg "k_means: Cannot have more clusters than data points";
+    if n < num_workers then
+        invalid_arg "k_means: Must have fewer workers than data points";
+    for i = 0 to n-1 do
+      if Array.length points.(i) <> dim then
+        invalid_arg "k_means: Dimension of data point is not as specified"
+    done;
+    let kmeans_chs = create_channels times in
+    let k_means_runs = List.map
+      (k_means_once iter points k num_workers) (List.map snd kmeans_chs) 
+    in
+    K.doco k_means_runs >>=
+    fun () -> get_chs [] (List.map fst kmeans_chs) >>=
+    fun centers_dis2 ->
+      let min_dis2, centers =
+        List.fold_left min (List.hd centers_dis2) centers_dis2
+      in
+      let print_centers fmt =
+        Array.iter (fun c -> Format.fprintf fmt "%s@." @@ string_of_vector c)
+      in
+      List.iter
+        (fun (dis, centers) -> 
+          Format.printf "%f,@\n %a" dis print_centers centers) centers_dis2;
+      Format.printf "%f@." min_dis2;
+      K.put centers qo_final
 
 end
 
@@ -208,9 +258,15 @@ module K_means_exe (K : Kahn.S) = struct
   let d = ref None
   let k = ref 8
   let iter = ref 300
+  let times = ref 5
   let num_workers = ref 10
+
   let data_file = ref None
   let output_file = ref "clusters.txt"
+
+  let plot = ref false
+  let height = ref 600
+  let width = ref 800
 
   let usage = 
     "Usage: " ^ Sys.argv.(0) ^ " [options] <filename>" ^
@@ -224,9 +280,17 @@ module K_means_exe (K : Kahn.S) = struct
       "-p", Arg.Set_int num_workers,
       " number of parallel processes used in the computation (default 10)";
       "-i", Arg.Set_int iter,
-      " number of iterations to run (default 300)";
+      " number of iterations in a single run (default 300)";
+      "-t", Arg.Set_int times,
+      " number of times to k-means algorithm will be run (default 5)";
       "-o", Arg.Set_string output_file,
-      " name of the output file (containing cluster centers)" ]
+      " name of the output file (containing cluster centers)";
+      "-plot", Arg.Set plot,
+      " plot the result (only when input vectors are of dimension 2)";
+      "-w", Arg.Set_int width,
+      " the width of the display zone (only when -plot is specified)";
+      "-h", Arg.Set_int height,
+      " the height of the display zone (only when -plot is specified)"]
 
   let parse_cmd () =
     Arg.parse (Arg.align options)
@@ -298,6 +362,8 @@ module K_means_exe (K : Kahn.S) = struct
     in
     points_from_file line_num points, d
 
+  (* Print the cluster centers in a file *)
+
   let printout_clusters out_ch points =
     let out = Format.formatter_of_out_channel out_ch in
     Format.fprintf out "cluster centers:@\n@\n";
@@ -307,6 +373,44 @@ module K_means_exe (K : Kahn.S) = struct
         Vector.string_of_vector point)
       points;
     Format.fprintf out "@?"
+
+  (* Plot the result, points is an non-empty array of 2d vectors  *)
+
+  let plot_points points centers =
+    let width = float_of_int @@ Graphics.size_x () in
+    let height = float_of_int @@ Graphics.size_y () in
+    let x_min, x_max, y_min, y_max =
+      Array.fold_left 
+      (fun (x_min, x_max, y_min, y_max) point ->
+        assert (Array.length point = 2);
+        let x_min = min x_min point.(0) in
+        let x_max = max x_max point.(0) in
+        let y_min = min y_min point.(1) in
+        let y_max = max y_max point.(1) in
+        x_min, x_max, y_min, y_max)
+      (points.(0).(0), points.(0).(0), points.(0).(1), points.(0).(1))
+      points
+    in
+    let x_margin = (x_max -. x_min) /. 15. in
+    let y_margin = (y_max -. y_min) /. 15. in
+    let x_min = x_min -. x_margin in
+    let x_max = x_max +. x_margin in
+    let y_min = y_min -. y_margin in
+    let y_max = y_max +. y_margin in
+    let plot_point point_type point =
+      let x_int = 
+        int_of_float @@ (point.(0)-.x_min) /. (x_max-.x_min) *. width in
+      let y_int = 
+        int_of_float @@ (point.(1)-.y_min) /. (y_max-.y_min) *. height in
+      begin
+        match point_type with
+        | `Point -> Graphics.plot x_int y_int
+        | `Center -> Graphics.fill_circle x_int y_int 3
+      end;
+    in
+    Array.iter (plot_point `Point) points;
+    Graphics.set_color Graphics.red;
+    Array.iter (plot_point `Center) centers
 
   let main = Lib.(
     delay parse_cmd () >>=
@@ -318,15 +422,32 @@ module K_means_exe (K : Kahn.S) = struct
       close_in in_ch;
       K.return @@ K.new_channel () >>=
     fun (q_in, q_out) -> 
-      try 
-        K_means.k_means !iter points d !k !num_workers q_out >>=
+      try
+        K_means.k_means !iter !times d points !k !num_workers q_out >>=
         fun () -> K.get q_in >>=
         fun centers -> 
           let out_ch = open_out !output_file in
           printout_clusters out_ch centers;
-          K.return (close_out out_ch)
+          close_out out_ch;
+          begin
+            if !plot then
+              if d = 2 then
+                begin
+                  Graphics.open_graph 
+                    (Format.sprintf " %dx%d" !width !height);
+                  plot_points points centers;
+                  ignore (Graphics.read_key ())
+                end
+              else
+                Format.eprintf 
+                  "%s: Warning: %s@."
+                  Sys.argv.(0) @@
+                  "cannot plot the result," ^
+                  " input data points must be of dimension 2"
+          end;
+          K.return ()
       with Invalid_argument err_msg ->
-        Format.eprintf "%s: %s@." Sys.argv.(0) err_msg; exit 10)
+        Format.eprintf "%s: %s@." Sys.argv.(0) err_msg; exit 1)
 
 end
 
