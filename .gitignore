@@ -22,4 +22,7 @@ setup.log
 *.swp
 *.tgz
 *.config
+*.log
+*.aux
+*.out
 test/

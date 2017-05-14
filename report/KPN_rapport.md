@@ -17,17 +17,16 @@ composent sont déterministes.
 Les différentes implémentations sont : 
 
 1. Une implémentation utilisant la bibliothèque de threads d'OCaml
-  (donnée dans l'énoncé)
-2. Une implémentation utilisant la bibliothèque de thread Lwt. 
-  Cette implémentation a servi de référence car Lwt contient dèjà des fonctions
-  caractéristiques de la communication inter-processus. 
+   (donnée dans l'énoncé)
+2. Une implémentation utilisant la bibliothèque de thread `Lwt`. 
+   Cette implémentation a servi de référence car `Lwt` contient dèjà des 
+   fonctions caractéristiques de la communication inter-processus. 
 3. Un implémentation utilisant des processus Unix communiquant entre eux 
-  avec des pipes grâce à la bibliothèque Unix d'OCaml.
+   avec des pipes grâce à la bibliothèque `Unix` d'OCaml.
 4. Une implémentation séquentielle où le parallélisme est simulé (inspiré de 
-  l'implémentation par continuation de l'article 
-  _A Poor Man's Concurrency Monad_).
+   l'article _A Poor Man's Concurrency Monad_).
 5. Une implémentation distribuée sur le réseau utilisant des sockets de 
-  la bibliothèque Unix d'OCaml
+   la bibliothèque `Unix` d'OCaml
 
 ## Les différentes implémentations
 
@@ -38,33 +37,33 @@ fonctions de type  `unit -> 'a`. C'est une promesse qui nous rendra une valeur
 de type `'a` une fois que la fonction `run` est exécutée. Chaque processus
 individuel vit dans son propre thread.
 
-### Threads de Lwt : `kahn_lwt.ml`
+### Threads de `Lwt` : `kahn_lwt.ml`
 
 Ici, les processus sont des threads de type `'a Lwt.t`, et la plupart des 
-fonctions requises sont déjà implémentés dans le module Lwt : return, bind, 
-doco (`Lwt.join`), run, get (`Lwt_stream.next`). L'implémentation est
-triviale.
+fonctions requises sont déjà implémentés dans le module `Lwt` : `return`, 
+`bind`, `doco` (`Lwt.join`), `run`, `get` (`Lwt_stream.next`). 
+L'implémentation est triviale.
 
-### Processus lourd du module Unix d'OCaml : `kahn_proc.ml`
+### Processus lourd du module `Unix` d'OCaml : `kahn_proc.ml`
 
 De manière analogue aux threads d'OCaml, les processus sont une fonction
 `unit -> 'a`. On utilise des pipes pour les canaux, couplés avec des
 mutex. Ces derniers préviennent des problèmes liés aux ressources
 partagées entre les processus, qui sont des portions de codes que l'on
-appellent zones critiques. Ils font parties des techniques dites
+appelle zones critiques. Ils font parties des techniques dites
 d'exclusion mutuelles, n'autorisant l'accès à la zone critique par un
 seul processus à la fois.
 
 Les fonctions get et put utilisent le module `Marshal` qui permet d'encoder
-n'importe quelle structures de données en séquences de bytes, afin d'être  
+n'importe quelle structures de données en séquences de bytes, afin d'être
 envoyés sur les canaux pour être ensuite décodés par le processus
 destinataire.
 
-Enfin, la fonction `doco` qui prend une liste de processus et les
+Enfin, la fonction `doco` prend une liste de processus et les
 exécute. Avec `Unix.waitpid`, le processus entier est bloquant: tous les
 processus de la liste doivent finir avant de passer à la prochaine étape.
 La fonction renvoie `unit` une fois que tous les processus de la liste ont 
-été exécutées.
+été exécutés.
 
 ### Implémentation séquentielle, parallélisme simulé : `kahn_seq.ml`
 
@@ -103,8 +102,8 @@ type `('a -> unit) -> unit` comme proposé dans l'énoncé. Cela requiert
 alors d'avoir une structure de donnée globale qui stocke ce qu'il reste
 à faire après chaque étape de l'exécution d'un processus.
 
-Nous avons choisi ici la première implémentation issue de l'article "A
-poor Man's Concurrency Monad".
+Nous avons choisi ici la première implémentation issue de l'article _A
+poor Man's Concurrency Monad_.
 
 ### Implémentation distribuée sur le réseau : `kahn_network.ml`
 
@@ -113,7 +112,7 @@ poor Man's Concurrency Monad".
 Cette implémentation a pour objectif de distribuer les processus sur
 plusieurs ordinateurs et communiquant à travers le réseau via des
 sockets.
-On utilise les sockets implémentés dans le module Unix d'OCaml et les
+On utilise les sockets implémentés dans le module `Unix` d'OCaml et les
 données sont transféréss avec le module `Marshal`.
 
 On distingue:
@@ -156,9 +155,9 @@ sur une même machine) il y a un thread qui se charge d'accepter les
 distributions de processus et de créer des nouveau threads
 dans lesquels ces processus seront exécutés. Le choix d'utiliser des
 processus légers autorise ainsi l'existence des variables partagées au sein
-d'un même exemplaire(?) de programme.
+d'un même exemplaire de programme.
 
-La fonction put prend un élément `v` à envoyer, et l'ensemble des canaux
+La fonction `put` prend un élément `v` à envoyer, et l'ensemble des canaux
 ouverts, et vérifie s'il existe un canal concret dans la socket
 (elle le crée sinon). Elle utilise `Marshal` pour envoyer la valeur dans 
 le canal et renvoie `unit` et le nouvel ensemble des canaux ouverts.
@@ -179,7 +178,7 @@ Il y a plusieurs options dans la ligne de commande ,
 
 * `-wait` : doit être utilisé sur tous les ordinateurs du réseau à 
   l'exception de l'ordinateur principal qui devra être lancé à la fin pour 
-  démarre le programme.
+  démarrer le programme.
 * `-port` : spécifie le port à écouter (1024 par défaut)
 * `-config` : permet de spécifier le nom du fichier contenant la liste des 
   ordinateurs à utiliser (par défaut, ce fichier est _network.config_).
@@ -229,11 +228,11 @@ réseau: l'incompatibilité entre la fonction `Unix.select` et le module
 ### Exemples basiques 
 
 * `put_get_test.ml` : un processus met l'entier 2 dans un canal et l'autre le 
-  lit et l'affiche. Faire `make put_get` pour générer ce programme
+  lit et l'affiche.
 * `int_printer.ml` : Un processus génère une suite croissante infini d'entier,
   tandis que le second les récupère et les affiche dans la sortie standard.
 * `alter_print.ml` : Deux processus écrivent et lisent alternativement une 
-  suite d'entier dans deux canaux.
+  suite d'entiers dans deux canaux.
 
 ### Crible d’Ératosthène
 
@@ -256,7 +255,8 @@ z<sub>n+1</sub> = z<sub>n</sub>² + c
 
 est bornée.
 
-Le fichier `Mandelbrot.ml` affiche l'ensemble sur [-2;2]x[-1.5;1.5]. 
+Le fichier `Mandelbrot.ml` affiche cet ensemble sur la région 
+[-2;2] x [-1.5;1.5]. 
 L'image est divisée en plusieurs zones et le calcul de chaque zone est pris 
 en charge par un processus. On peut spécifier la taille de l'image, 
 le nombre de zones et le nombre d'itérations pour chaque point. 
