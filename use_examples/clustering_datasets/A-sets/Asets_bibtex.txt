@@ -1,0 +1,8 @@
+@TECHREPORT{Asets,
+  author = {I. K\"arkk\"ainen and P. Fr\"anti},
+  title = {Dynamic local search algorithm for the clustering problem},
+  institution = {Department of Computer Science, University of Joensuu},
+  address = {Joensuu, Finland},
+  number = {A-2002-6},
+  year = {2002}
+}
