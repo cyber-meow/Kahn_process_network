@@ -1,0 +1,406 @@
+
+\title{Projet Réseaux de Kahn\vspace{-0.5em}}
+
+\author{Yu-Guan Hsieh \& Téo Sanchez}
+\date{\today}
+
+\maketitle
+
+\section{Résumé du projet}\label{ruxe9sumuxe9-du-projet}
+
+Le but de ce projet est de réaliser différentes implémentations de
+réseaux de Kahn à partir d'une interface donnée sous forme monadique (ce
+qui nous permet de manipuler des langages fonctionnels purs avec des
+traits impératifs).
+
+Les réseaux de Kahn (Kahn Process Networks en anglais), sont un modèle
+de calcul distribué entre plusieurs processus communiquant entre eux par
+des files. Ce réseau a un comportement déterministe si les processus qui
+le composent sont déterministes.
+
+Les différentes implémentations sont :
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\itemsep1pt\parskip0pt\parsep0pt
+\item
+  Une implémentation utilisant la bibliothèque de threads d'OCaml
+  (donnée dans l'énoncé)
+\item
+  Une implémentation utilisant la bibliothèque de thread \texttt{Lwt}. Cette
+    implémentation a servi de référence car \texttt{Lwt} contient dèjà des
+  fonctions caractéristiques de la communication inter-processus.
+\item
+  Un implémentation utilisant des processus Unix communiquant entre eux
+  avec des pipes grâce à la bibliothèque \texttt{Unix} d'OCaml.
+\item
+  Une implémentation séquentielle où le parallélisme est simulé (inspiré
+  de l'article \emph{A Poor Man's Concurrency Monad}).
+\item
+  Une implémentation distribuée sur le réseau utilisant des sockets de
+    la bibliothèque \texttt{Unix} d'OCaml
+\end{enumerate}
+
+\section{Les différentes
+implémentations}\label{les-diffuxe9rentes-impluxe9mentations}
+
+\subsection{Threads d'OCaml (fournie) :
+\texttt{kahn\_th.ml}}\label{threads-docaml-fournie-kahnux5fth.ml}
+
+Dans cette implémentation, les processus sont représentés par des
+fonctions de type \texttt{unit -\textgreater{} 'a}. C'est une promesse
+qui nous rendra une valeur de type \texttt{'a} une fois que la fonction
+\texttt{run} est exécutée. Chaque processus individuel vit dans son
+propre thread.
+
+\subsection{Threads de \texttt{Lwt} :
+\texttt{kahn\_lwt.ml}}\label{threads-de-lwt-kahnux5flwt.ml}
+
+Ici, les processus sont des threads de type \texttt{'a Lwt.t}, et la
+plupart des fonctions requises sont déjà implémentés dans le module 
+\texttt{Lwt}: \texttt{return}, \texttt{bind}, \texttt{doco} 
+(\texttt{Lwt.join}), \texttt{run}, \texttt{get}
+(\texttt{Lwt\_stream.next}). L'implémentation est triviale.
+
+\subsection{Processus lourd :
+\texttt{kahn\_proc.ml}}\label{processus-lourd-du-module-unix-docaml-kahnux5fproc.ml}
+
+De manière analogue aux threads d'OCaml, les processus sont une fonction
+\texttt{unit -\textgreater{} 'a}. On utilise des pipes pour les canaux,
+couplés avec des mutex. Ces derniers préviennent des problèmes liés aux
+ressources partagées entre les processus, qui sont des portions de codes
+que l'on appelle zones critiques. Ils font parties des techniques
+dites d'exclusion mutuelles, n'autorisant l'accès à la zone critique par
+un seul processus à la fois.
+
+Les fonctions get et put utilisent le module \texttt{Marshal} qui permet
+d'encoder n'importe quelle structures de données en séquences de bytes,
+afin d'être envoyés sur les canaux pour être ensuite décodés par le
+processus destinataire.
+
+Enfin, la fonction \texttt{doco} prend une liste de processus et les
+exécute. Avec \texttt{Unix.waitpid}, le processus entier est bloquant:
+tous les processus de la liste doivent finir avant de passer à la
+prochaine étape. La fonction renvoie \texttt{unit} une fois que tous les
+processus de la liste ont été exécutés.
+
+\subsection{Implémentation séquentielle :
+\texttt{kahn\_seq.ml}}\label{impluxe9mentation-suxe9quentielle-paralluxe9lisme-simuluxe9-kahnux5fseq.ml}
+
+On distingue le ``vrai'' parallélisme (où un ordinateurs multi-cœurs
+lance des processus sur plusieurs de ses processeurs) du parallélisme à
+temps partagé, où les threads s'exécutent sur un même processeur. Dans
+ce dernier cas, le parallélisme est simulé. Cette idée est incarnée par
+deux implémentations possibles :
+
+La première consiste à traduire directement le code Haskell issu de
+l'article \emph{A Poor Man's Concurrency Monad} en OCaml à quelques
+nuances près, même si la structure reste la même. Elle utilise la
+méthode d'\emph{entrelacement} (\emph{interleaving} en anglais) c'est à
+dire que le processeur va exécuter le début d'un thread, avant de le
+suspendre pour donner la main à un autre thread. Afin de relancer les
+thread suspendus au même endroit, on doit avoir accès à son ``futur''
+appelé généralement sa \emph{continuation}. Cette implémentation
+monadique invoque des fonctions qui prennent une \emph{continuation}
+comme premier arguement.
+
+Ainsi, les processus sont divisés en tranches appelés actions, et ces
+mêmes actions renvoient leur futur qui sont elles mêmes des actions :
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{type} \NormalTok{action =}
+  \NormalTok{| }\DataTypeTok{Stop}
+  \NormalTok{| }\DataTypeTok{Action} \KeywordTok{of} \NormalTok{(}\DataTypeTok{unit} \NormalTok{-> action)}
+  \NormalTok{| }\DataTypeTok{Doco} \KeywordTok{of} \NormalTok{action }\DataTypeTok{list}
+\end{Highlighting}
+\end{Shaded}
+
+Un processus est alors de type
+\texttt{('a -\textgreater{} action) -\textgreater{} action}.
+
+Une autre implémentation possible pour cette section est d'utiliser un
+type \texttt{('a -\textgreater{} unit) -\textgreater{} unit} comme
+proposé dans l'énoncé. Cela requiert alors d'avoir une structure de
+donnée globale qui stocke ce qu'il reste à faire après chaque étape de
+l'exécution d'un processus.
+
+Nous avons choisi ici la première implémentation issue de l'article \emph{A
+poor Man's Concurrency Monad}.
+
+\subsection{Implémentation distribuée sur le réseau :
+\texttt{kahn\_network.ml}}\label{impluxe9mentation-distribuuxe9e-sur-le-ruxe9seau-kahnux5fnetwork.ml}
+
+\subsubsection{Déscription}\label{duxe9scription}
+
+Cette implémentation a pour objectif de distribuer les processus sur
+plusieurs ordinateurs et communiquant à travers le réseau via des
+sockets. On utilise les sockets implémentés dans le module \texttt{Unix}
+d'OCaml et les données sont transféréss avec le module \texttt{Marshal}.
+
+On distingue:
+
+\begin{itemize}
+\itemsep1pt\parskip0pt\parsep0pt
+\item
+  Les processus qui sont du type
+  \texttt{CSet.t -\textgreater{} 'a * CSet.t}, avec \texttt{CSet} une
+  structure de donnée créée avec le module \texttt{Set} d'OCaml, et qui
+  permet de stocker les canaux ouverts à un moment donné. Un processus
+  prend l'ensemble des canaux ouverts et renvoie les canaux ouvers après
+  l'exécution du processus.
+\item
+  Un canal est défini par son numéro de port \texttt{port\_num:int},
+  le nom de son ordinateur hôte \texttt{host:string}, et le champs
+  \texttt{sock:(sock *   sock\_kind) option} qui défini le sens de la
+  communication (qui est le producteur et qui est le consommateur) et
+  stocke le type abstrait de canal (qui se compose de
+  \texttt{out\_channel} et \texttt{in\_channel} d'OCaml) si la
+  connection a été établie.
+\item
+  Une file des ordinateurs disponibles \texttt{computer\_queue}, créée à
+  partir du fichier \emph{network.config} où l'on doit écrire la liste
+  des ordinateurs que l'on souhaite utiliser.
+\end{itemize}
+
+La fonction \texttt{new\_channel} crée deux threads. L'un communique
+avec les producteurs et l'autre avec les consommateurs au travers de
+sockets. Les deux threads communiquent également entre eux par un pipe :
+Le premier thread lit les données dans les sockets entre lui et les
+producteurs et les stocke dans le pipe tandis que le second thread lit
+les données qui sont mis dans le pipe et les mets dans les sockets vers
+les consommateurs quand il reçoit une requête de sa part (\texttt{GET}:
+mettre une valeur dans le canal; \texttt{GETEND}: la fin de
+communication).
+
+La fonction \texttt{send\_processes} assure la distribution des
+processus sur les différents ordinateurs de \texttt{computer\_queue} et
+établit les connections grâce aux sockets (à travers la fonction
+\texttt{easy\_connect}). Puis dans la fonction \texttt{doco}, grâce à
+l'utilisation de la fonction \texttt{Unix.select}, on surveille que les
+processus fils s'exécutent, et dans le cas contraire, il faut
+redistribuer le processus.
+
+On précise aussi que sur chaque ordinatuer (ou encore mieux, sur chaque
+noeud de réseau car un programme peut être lancé plusieurs fois sur une
+même machine) il y a un thread qui se charge d'accepter les
+distributions de processus et de créer des nouveau threads dans lesquels
+ces processus seront exécutés. Le choix d'utiliser des processus légers
+autorise ainsi l'existence des variables partagées au sein d'un même
+exemplaire de programme.
+
+La fonction \texttt{put} prend un élément \texttt{v} à envoyer, et l'ensemble 
+des canaux ouverts, et vérifie s'il existe un canal concret dans la socket
+(elle le crée sinon). Elle utilise \texttt{Marshal} pour envoyer la
+valeur dans le canal et renvoie \texttt{unit} et le nouvel ensemble des
+canaux ouverts. La fonction \texttt{get} procède de manière analogue
+sauf qu'elle renvoie une valeur.
+
+Les fonctions \texttt{commu\_with\_send} et \texttt{commu\_with\_recv}
+gèrent le remplacement des producteurs et des consommateurs
+respectivement, en appelant un nouveau client quand la connection est
+rompue ou lorsque le processus lui renvoie le signal \texttt{PutEnd} ou
+\texttt{GetEnd} signifiant la fin de la communication.
+
+\subsubsection{Utilisation}\label{utilisation}
+
+Cette implémentation ne fonctionne qu'avec OCaml \textgreater{}= 4.03.0
+de façon génerale (dans des cas particuliers, comme le fichier
+\texttt{int\_printer\_network.ml}, ça pourrait marcher avec OCaml
+4.02.0).
+
+Il y a plusieurs options dans la ligne de commande ,
+
+\begin{itemize}
+\itemsep1pt\parskip0pt\parsep0pt
+\item
+  \texttt{-wait} : doit être utilisé sur tous les ordinateurs du réseau
+  à l'exception de l'ordinateur principal qui devra être lancé à la fin
+  pour démarrer le programme.
+\item
+  \texttt{-port} : spécifie le port à écouter (1024 par défaut)
+\item
+  \texttt{-config} : permet de spécifier le nom du fichier contenant la
+  liste des ordinateurs à utiliser (par défaut, ce fichier est
+  \emph{network.config}).
+\end{itemize}
+
+Le fichier \emph{network.config} se présente sous le format suivant :
+
+\begin{verbatim}
+Computer1 [port1]
+Computer2 [port2]
+...
+\end{verbatim}
+
+Le même ordinateur peut apparaître plusieurs fois si les ports sont
+différents.
+
+\subsubsection{D'autres problèmes
+techniques}\label{dautres-probluxe8mes-techniques}
+
+Lorsque la communication avec un ordinateur est interrompue de manière
+inopinée, le programme peut ne plus continuer correctement puisque le
+processus distribué interrompu sera redémarré depuis le début. Par
+exemple, avec l'exemple de base de la génération d'entier, si la
+fonction d'affichage sur la sortie standard est interrompu, elle sera
+redémarré et continuera d'afficher les entiers qu'il reçoit. Le résultat
+ne sera donc pas altéré. A l'inverse, s'il s'agit de la fonction qui
+génère les entiers, après l'arrêt de ce processus, le programme
+affichera les entiers depuis le début.
+
+Pour règler ce problème, on a essayé de demander le processus fils de
+renvoyer son futur pour chaque \texttt{bind} exécutée. Il y a des
+modifications à faire, et surtout le type d'un processus ne resterait
+plus le même, mais ça n'a pas abouti à cause du module \texttt{Marshal}
+qui ne prend pas en charge le type abstrait (même si on n'a pas pu
+identifier d'où vient ce type abstrait en jeu empêchant notre code de
+fonctionner).
+
+Afin que les communications à travers des canaux soient plus robustes,
+des questions sont à poser. Comment vérifier que le message envoyé a été
+bien reçu (et par la bonne personne)? Comment affirmer que les message
+reçus viennent effectivment du programme en question (et que les
+messages sont corrects)? Les idées comme des clés d'authentification
+peuvent être considérées.
+
+Il y a encore un autre petit soucis dans notre réalisation de la version
+réseau: l'incompatibilité entre la fonction \texttt{Unix.select} et le
+module \texttt{Graphics} d'OCaml. Un bloc \texttt{try... with...} a été
+adopté face à cette gêne.
+
+\section{Exemples d'applications}\label{exemples-dapplications}
+
+\subsection{Exemples basiques}\label{exemples-basiques}
+
+\begin{itemize}
+\itemsep1pt\parskip0pt\parsep0pt
+\item
+  \texttt{put\_get\_test.ml} : un processus met l'entier 2 dans un canal
+  et l'autre le lit et l'affiche.
+\item
+  \texttt{int\_printer.ml} : Un processus génère une suite croissante
+  infini d'entier, tandis que le second les récupère et les affiche dans
+  la sortie standard.
+\item
+  \texttt{alter\_print.ml} : Deux processus écrivent et lisent
+  alternativement une suite d'entiers dans deux canaux.
+\end{itemize}
+
+\subsection{Crible d'Ératosthène}\label{crible-duxe9ratosthuxe8ne}
+
+Il s'agit d'un procédé permettant de trouver tous les nombres premiers
+inférieurs à un certain entier naturel donné. Le fichier
+\texttt{sieve\_Erathostene.ml} contient l'algorithme décrit à la page 9
+de l'article \emph{Coroutines and Networks of Parallel Processes} de
+Gilles Kahn et David MacQueen. Le nombre de processus utilisés dans cet
+algorithme n'est pas borné et donc ne fonctionne pas bien avec
+l'implémentation distribuée par le réseau.
+
+\subsection{Tracé de l'ensemble de
+Mandelbrot}\label{tracuxe9-de-lensemble-de-mandelbrot}
+
+L'ensemble de Mandelbrot est une fractale définie comme l'ensemble des
+points $c$ du plan complexe pour lesquels la suite des nombres complexes
+définie par récurrence par
+
+\begin{align*}
+  z_0 &= 0\\
+  z_{n+1} &= z_n^2 + c
+\end{align*}
+
+est bornée.
+
+Le fichier \texttt{Mandelbrot.ml} affiche cet ensemble sur la région 
+{[}-2;2{]} x {[}-1.5;1.5{]}. L'image est divisée en plusieurs zones et le 
+calcul de chaque zone est pris en charge par un processus. On peut spécifier 
+la taille de l'image, le nombre de zones et le nombre d'itérations pour
+chaque point.
+
+\subsection{Pong}\label{pong}
+
+L'implémentation de pong n'utilise que la version réseau des KPN, un
+ordinateur lance le programme avec l'option \texttt{-wait} tandis que
+l'autre peut choisir les paramètres de jeu.
+
+\subsection{K-moyennes}\label{k-moyennes}
+
+Il s'agit d'un algorithme de partitionnement des données d'un problème
+d'optimisation combinatoire. Le fichier d'entrée contient sur chaque
+ligne un point dont les coordonnées sont séparées par des espaces. Le
+nombre de partitions \texttt{k}, le nombre d'itérations \texttt{i}, le
+nombre d'ouvriers \texttt{p} (de processus en parallèle), et le nombre
+de fois à exécuter l'algorithme \texttt{t} peuvent être données en
+arguments. Les centres des partitions sont ensuite calculées et écrits
+dans un fichier de sortie spécifié par l'option \texttt{-o}. En plus, si
+les entrées sont des points de dimension 2, on peut afficher le résultat
+en utilisant l'option \texttt{-plot}.
+
+\section{Divers}\label{divers}
+
+\subsection{Parsing de la ligne de
+commande}\label{parsing-de-la-ligne-de-commande}
+
+En OCaml avec le module \texttt{Arg} le parsing de la ligne de commande
+ne peut s'effectuer que dans un seul endroit, ce qui nous pose de
+difficulté car on a besoin que ça soit fait plusieurs fois (une fois
+pour le foncteur \texttt{Choose\_impl}, une fois pour la fonction
+\texttt{run} dans l'implémentation de réseau et enfin une fois dans le
+programme utilisateur). Pour contourner ce problème, on a choisi
+d'utiliser la fonction \texttt{Arg.parse\_argv} au lieu de
+\texttt{Arg.parse} et on modifie directement la valeur de
+\texttt{Sys.argv}. Il y a quelques défauts de cette solution:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  Le tableau \texttt{Sys.argv} peut contenir des chaînes de caractères
+  vides après le parsing. L'utilisateur de la bibliothèque doit les
+  négliger.
+\item
+  Il nous manque un message complèt indiquant tous ces spécifications
+  qui peut s'afficher quelque parts quand il y en a besoin (par exemple
+  avec la commande \texttt{-{}-help}).
+\end{enumerate}
+
+\textbf{Anecdote:} En OCaml 4.03.0 et 4.04.0, dans le module
+\texttt{Arg} avec la fonction \texttt{Arg.parse}, pour une option de
+ligne de commande qui prend un seul argument (c'est ainsi le cas pour
+\texttt{-port} dans notre programme), le message d'erreur peut
+s'afficher trois fois si aucun argument est donné à cette option.
+
+\subsection{MapReduce}\label{mapreduce}
+
+On a voulu implémenter le modèle de MapReduce dans le cadre de réseau de
+Kahn, mais c'est enfin abandonné dû à deux raisons principales:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{MapReduce est indéterministe, alors que KPN est déterministe}\\[0.5em]
+  Le modèle MR est indéterministe dans le sens qu'il n'y
+  a pas un ordre prédéfini des exécutions de tâches. Les résultats des
+  ouvriers sont traités \emph{immédiatement} par le patron dès qu'ils
+  sont produits, ce qui est impossible dans un réseau de Kahn car on n'a
+  pas de droit de tester si un canal est vide ou pas: une fois qu'on est
+  bloqué, on est bloqué. Par conséquent, en modèlisant MapReduce par
+  KPN, tout devient déterministe, ce qui montre une différence
+  intrinsèque entre ces deux modèles.
+\item
+  \textbf{Le rôle de patron}\\[0.5em]
+  Observons que dans le module
+  \texttt{Functory}, le patron existe particulièrement pour effectuer un
+  effet de bord, ce qui est gênant car quand on fait un \texttt{doco}
+  dans les réseaux de Kahn, on aimerait bien que tous les processus
+  soient purs (à éventuellement les opérations I/O près). Le fait que le
+  patron peut effectuer un effet de bord impose qu'il vit dans le même
+  ordinateur et le même processus Unix que le process qui a effectué la
+  \texttt{doco}, ce que l'on n'a à priori pas de droit de controler au
+  niveau d'un modèle abstrait tel que celui de réseau de Kahn.
+\end{enumerate}
+
+Les deux points ci-dessus ne nous empêchent pas d'implémenter une
+interface MapReduce en utilisant notre bibliothèque de réseau de Kahn.
+Pourtant, ils nous font remarquer des nuances éventuelles entre le vrai
+MapReduce et un MapReduce qui est simulé par KPN.
+

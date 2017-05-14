@@ -1,0 +1,44 @@
+We have re-generated the GT centroids as follows.
+
+-----------------------------------------------------------------------
+
+Birch 1:
+
+The centroid locations were first optimized  by genetic algorihm (GA) 
+[Fränti, Pat.Rec.Lett.2000]. The centroids form a 10x10 grid. Their
+average distance was calculated as 92247. A grid using this parameter
+was then manually fit for the data, and the result locations recorded 
+as the ground truth centroids. Ground truth partition lables were
+obtained by mapping each point to its nearest centroid.
+
+
+Birch 2:
+
+Centroid locations were first optimized by GA, and their average 
+distance in x-axis was calculated as 9512 from the result. 
+The centroids form a sine curve function:
+
+  y(x) = amplitude * sin(2*pi*frequency*x + phaseshift) + offset
+
+It was manually fit using parameters:
+
+  Offset      =  43659
+  Amplitude   =  -37819
+  Phaseshift  =  20.8388
+  Frequency   =  0.000004205
+
+Ground truth centroids were then plotted in this curve and the
+corresponding x and y(x) were recorded as the groung truth centroids.
+Ground truth partitions were obtained by mapping each point to its
+nearest centroid.
+
+
+Birch 3:
+
+Centroid locations were first optimized by GA, from which they were
+manually tuned and their locations recorded as the ground truth.
+Due to the overlap, ground truth partitions were not calculated.
+
+
+-----------------------------------------------------------------------
+

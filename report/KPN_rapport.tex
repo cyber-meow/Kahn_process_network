@@ -1,0 +1,150 @@
+
+\documentclass[12pt, a4paper]{article}
+
+
+%%%%%%%%%% Import Packages %%%%%%%%%
+
+\usepackage[margin=2.5cm]{geometry} % 2cm margins
+\usepackage{amsmath,amsthm,amssymb} % AMS math environment
+\usepackage{type1cm}    % fontsize setting
+\usepackage{titlesec}   % section, subsection ... font setting
+\usepackage{titling}    % title setting
+\usepackage{fancyhdr}   % header and footer
+\usepackage{enumerate}  % improving enumerate
+\usepackage{stmaryrd}   % some math fonts
+\usepackage[square, comma, numbers, sort&compress]{natbib} % bibliography
+\usepackage[usenames, dvipsnames]{color} % to use colors
+
+%%%%%%%%%%% For figures %%%%%%%%%%
+\usepackage{graphicx}    % insert figures
+\usepackage{float}       % fix the position of the figure with [H]
+
+%%%%%%%%%% Table and caption packages %%%%%%%%%%%
+\usepackage{booktabs} % toprule, bottomrule ...
+\usepackage{tabu}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{caption3}
+\usepackage{subcaption}
+
+
+%%%%%%%%%% pandoc concerned %%%%%%%%%%
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
+% use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[utf8]{inputenc}
+\else % if luatex or xelatex
+  \ifxetex
+    \usepackage{mathspec}
+    \usepackage{xltxtra,xunicode}
+  \else
+    \usepackage{fontspec}
+  \fi
+  \defaultfontfeatures{Mapping=tex-text,Scale=MatchLowercase}
+  \newcommand{\euro}{€}
+\fi
+% use microtype if available
+\IfFileExists{microtype.sty}{\usepackage{microtype}}{}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{{#1}}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{{#1}}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{{#1}}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{{#1}}}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{{#1}}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{{#1}}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{{#1}}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{{#1}}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{{#1}}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{{#1}}}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{{#1}}}
+\newcommand{\RegionMarkerTok}[1]{{#1}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{{#1}}}}
+\newcommand{\NormalTok}[1]{{#1}}
+\ifxetex
+  \usepackage[setpagesize=false, % page size defined by xetex
+              unicode=false, % unicode breaks when used with xetex
+              xetex]{hyperref}
+\else
+  \usepackage[unicode=true]{hyperref}
+\fi
+\hypersetup{breaklinks=true,
+            bookmarks=true,
+            pdfauthor={},
+            pdftitle={},
+            colorlinks=true,
+            citecolor=blue,
+            urlcolor=blue,
+            linkcolor=magenta,
+            pdfborder={0 0 0}}
+\urlstyle{same}  % don't use monospace font for urls
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
+%\setcounter{secnumdepth}{0}
+
+
+%%%%%%%%%% Page settings %%%%%%%%%% 
+\setlength{\headheight}{15pt}  % with titling
+\setlength{\droptitle}{-1.5cm} % white space before the title
+\parindent=0pt % indent spacing
+\parskip=0.8em  % spacing between two paragraphs
+
+
+%%%%%%%%%% Math display spacing (gather, equation, ...) %%%%%%%%%%
+\makeatletter
+\g@addto@macro\normalsize{%
+  \setlength{\abovedisplayskip}{-8pt}
+  \setlength{\belowdisplayskip}{4pt}
+  \setlength{\abovedisplayshortskip}{-8pt}
+  \setlength{\belowdisplayshortskip}{4pt}
+}
+
+
+%%%%%%%%%% Figure caption %%%%%%%%%%
+\captionsetup[figure]{
+ 	font = small,
+	name = \textsc{Figure},
+	justification = justified, % caption as normal paragraph
+    labelsep = colon, % Figure: ...
+	skip = \medskipamount} % space between caption and image
+\captionsetup[sub]{font = small, belowskip = 2pt}
+\setlength{\belowcaptionskip}{-8pt}
+
+
+%%%%%%%%%% Table settings %%%%%%%%%%
+\captionsetup[table]{
+  parskip = 20pt,
+  format = hang,
+  font = small,
+  name = \textsc{Table},
+  justification = justified,
+  skip = \medskipamount,
+  singlelinecheck = false
+}
+\renewcommand{\arraystretch}{1.2}
+\tabcolsep = 10pt
+
+
+%%%%%%%%%% Reference settings %%%%%%%%%%
+\hypersetup{
+unicode=true, 
+bookmarksdepth=-1, 
+pdfborder={0 0 0}, 
+colorlinks=true, 
+linkcolor=RoyalBlue,
+citecolor=blue
+}
+
+
+\begin{document}
+\input{Content}
+\end{document}
