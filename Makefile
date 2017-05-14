@@ -3,6 +3,9 @@ OCAMLBUILD=ocamlbuild -classic-display \
 TARGET=native
 DIR=use_examples/
 
+k_means:
+	$(OCAMLBUILD) $(DIR)k_means.$(TARGET)
+
 put_get:
 	$(OCAMLBUILD) $(DIR)put_get_test.$(TARGET)
 
@@ -20,9 +23,6 @@ mandelbrot:
 
 pong:
 	$(OCAMLBUILD) $(DIR)pong_dist.$(TARGET)
-
-k_means:
-	$(OCAMLBUILD) $(DIR)k_means.$(TARGET)
 
 int_printer_net:
 	$(OCAMLBUILD) $(DIR)int_printer_network.$(TARGET)

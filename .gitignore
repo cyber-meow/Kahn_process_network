@@ -25,4 +25,6 @@ setup.log
 *.log
 *.aux
 *.out
+clusters.txt
 test/
+hsieh-sanchez/
